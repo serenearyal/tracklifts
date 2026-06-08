@@ -127,16 +127,19 @@ struct ProgressOverviewView: View {
     // MARK: - Records
 
     private var recentPRs: [(exercise: Exercise, value: Double, metric: ProgressMetric)] {
-        var results: [(Exercise, Double, ProgressMetric)] = []
+        var results: [(exercise: Exercise, value: Double, metric: ProgressMetric, date: Date)] = []
         for exercise in trackedExercises {
             let metric = exercise.primaryMetric
             let series = ProgressCalculator.series(for: exercise, metric: metric, in: sessions.reversed())
-            guard series.count >= 2, let best = series.map(\.value).max(), best > 0 else { continue }
-            if let last = series.last?.value, last >= best - 0.001 {
-                results.append((exercise, best, metric))
-            }
+            guard series.count >= 2, let best = series.map(\.value).max(), best > 0,
+                  let last = series.last, last.value >= best - 0.001 else { continue }
+            results.append((exercise, best, metric, last.date))
         }
-        return results.sorted { $0.1 > $1.1 }
+        // Most-recent PR first — matches "Recent Records" and stays metric-
+        // agnostic, so we never rank kilograms against rep counts.
+        return results
+            .sorted { $0.date > $1.date }
+            .map { ($0.exercise, $0.value, $0.metric) }
     }
 
     /// Every exercise that has ever been logged, most-recently-trained first.
@@ -265,7 +268,7 @@ struct ProgressOverviewView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .cardStyle()
         } else {
-            VStack(spacing: 10) {
+            LazyVStack(spacing: 10) {
                 ForEach(exercises) { exercise in
                     NavigationLink { ExerciseDetailView(exercise: exercise) } label: {
                         ExerciseTrendCard(exercise: exercise, sessions: sessions, unit: unit)

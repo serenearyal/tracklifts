@@ -166,7 +166,7 @@ struct BodyweightToggleChip: View {
                 }
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.borderless)
         .animation(.snappy, value: isOn)
         .accessibilityLabel("Bodyweight")
         .accessibilityValue(isOn ? "on" : "off")

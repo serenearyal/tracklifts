@@ -55,7 +55,9 @@ struct LogWorkoutView: View {
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
+        .scrollDismissesKeyboard(.interactively)
         .background(AppBackground())
+        .keyboardDoneBar()
         .navigationTitle(isNew ? "New Workout" : "Edit Workout")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

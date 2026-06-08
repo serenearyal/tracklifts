@@ -13,6 +13,9 @@ import Charts
 struct ExerciseProgressView: View {
     let exercise: Exercise
     @AppStorage("weightUnit") private var unit: WeightUnit = .kg
+    // Observed so the chart (and its default metric) refresh when body weight
+    // changes — a pure-bodyweight lift switches from Best Reps to Est. 1RM.
+    @AppStorage(BodyMetrics.key) private var bodyWeight: Double = 0
 
     @Query(sort: \WorkoutSession.date) private var sessions: [WorkoutSession]
     @State private var metric: ProgressMetric
@@ -73,6 +76,11 @@ struct ExerciseProgressView: View {
                 summaryRow
                 chart
             }
+        }
+        .onChange(of: bodyWeight) {
+            // Only bodyweight lifts change which metric is meaningful; don't
+            // disturb a metric the user picked on a weighted lift.
+            if exercise.isBodyweight { metric = exercise.primaryMetric }
         }
     }
 

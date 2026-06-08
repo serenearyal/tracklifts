@@ -7,6 +7,9 @@ import Foundation
 import SwiftData
 
 enum SeedManager {
+    /// One-time flag: have we reconciled seeded exercises' body-weight flags?
+    private static let backfillFlag = "didBackfillBodyweight_v1"
+
     /// Inserts the default exercise catalog the first time the app runs.
     /// Safe to call on every launch — it no-ops once exercises exist, then
     /// runs a one-time backfill so stores seeded before body-weight support
@@ -24,6 +27,10 @@ enum SeedManager {
             context.insert(Exercise(name: name, muscleGroup: group,
                                     isBodyweight: ExerciseLibrary.isBodyweight(name)))
         }
+        // A fresh store is seeded with correct flags already, so mark the
+        // backfill done. Otherwise it would run on the next launch and revert
+        // any bodyweight toggle the user makes during this first session.
+        UserDefaults.standard.set(true, forKey: backfillFlag)
         try? context.save()
     }
 
@@ -38,7 +45,7 @@ enum SeedManager {
         try? context.delete(model: SplitDay.self)
         try? context.delete(model: Split.self)
         try? context.delete(model: Exercise.self)
-        UserDefaults.standard.removeObject(forKey: "didBackfillBodyweight_v1")
+        UserDefaults.standard.removeObject(forKey: backfillFlag)
         try? context.save()
     }
 
@@ -46,9 +53,8 @@ enum SeedManager {
     /// flag existed. Runs once; only touches non-custom exercises by exact name.
     @MainActor
     static func backfillBodyweightIfNeeded(_ context: ModelContext) {
-        let flag = "didBackfillBodyweight_v1"
-        guard !UserDefaults.standard.bool(forKey: flag) else { return }
-        defer { UserDefaults.standard.set(true, forKey: flag) }
+        guard !UserDefaults.standard.bool(forKey: backfillFlag) else { return }
+        defer { UserDefaults.standard.set(true, forKey: backfillFlag) }
 
         let all = (try? context.fetch(FetchDescriptor<Exercise>())) ?? []
         var changed = false

@@ -46,7 +46,14 @@ struct SettingsView: View {
                                 .font(.sans(13, .bold)).tracking(1)
                                 .foregroundStyle(Palette.inkSecondary)
                             Spacer()
+                            if bodyWeightFocused {
+                                Button("Done") { bodyWeightFocused = false }
+                                    .font(.sans(15, .semibold))
+                                    .foregroundStyle(Palette.ember)
+                                    .transition(.opacity.combined(with: .move(edge: .trailing)))
+                            }
                         }
+                        .animation(.snappy, value: bodyWeightFocused)
                         Text("Used to score bodyweight lifts (pull-ups, dips…) as your body weight plus any added weight. Leave at 0 to track those by reps instead.")
                             .font(.sans(12))
                             .foregroundStyle(Palette.inkSecondary)
@@ -62,16 +69,10 @@ struct SettingsView: View {
                 .padding(20)
             }
             .scrollIndicators(.hidden)
+            .scrollDismissesKeyboard(.interactively)
             .background(AppBackground())
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("Done") { bodyWeightFocused = false }
-                        .font(.sans(15, .semibold))
-                }
-            }
         }
     }
 

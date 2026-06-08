@@ -36,7 +36,8 @@ extension LoggedSet {
     /// user hasn't recorded a body weight, only the added weight counts.
     var effectiveWeight: Double {
         guard isBodyweight else { return weight }
-        return BodyMetrics.isSet ? BodyMetrics.current + weight : weight
+        let bodyWeight = BodyMetrics.current
+        return bodyWeight > 0 ? bodyWeight + weight : weight
     }
 
     /// A compact human summary of one set, e.g. "8×60kg", "12 reps", "10 +15kg".
