@@ -12,6 +12,7 @@ import SwiftData
 
 struct RootView: View {
     @Environment(\.modelContext) private var context
+    @AppStorage(Profile.didOnboardKey) private var didOnboard = false
 
     var body: some View {
         TabView {
@@ -37,6 +38,15 @@ struct RootView: View {
             if ProcessInfo.processInfo.arguments.contains("--seed-sample") {
                 SampleData.seedIfNeeded(context)
             }
+            // UI-test hook: force a clean first-run of onboarding (for screenshots).
+            if ProcessInfo.processInfo.arguments.contains("--show-onboarding") {
+                Profile.reset()
+                BodyMetrics.current = 0
+                didOnboard = false
+            }
+        }
+        .fullScreenCover(isPresented: Binding(get: { !didOnboard }, set: { didOnboard = !$0 })) {
+            OnboardingView()
         }
     }
 }

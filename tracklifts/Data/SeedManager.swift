@@ -61,6 +61,7 @@ enum SeedManager {
         try? context.delete(model: FoodPortion.self)
         try? context.delete(model: FoodItem.self)
         BodyMetrics.current = 0
+        UserDefaults.standard.set(true, forKey: Profile.didOnboardKey) // skip onboarding in UI tests
         UserDefaults.standard.removeObject(forKey: backfillFlag)
         try? context.save()
     }

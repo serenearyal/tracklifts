@@ -1,30 +1,31 @@
-# Task: Log redesign · combine tabs · marketing website
+# Task: Onboarding — targets, timeframe/pace, layout, debug, goals, tickers
 
-## App changes (main agent) — DONE
-- [x] A1 — Log page: date ("JUN 8") is now the hero; weekday ("MONDAY") is the small ember eyebrow above it (`SessionRow`).
-- [x] A2 — Combined **Exercises + Splits → "Library"** tab with FORGE ember segmented switcher.
-  - [x] `Features/Library/LibraryView.swift` (LibraryMode + LibraryView + LibraryModeSwitcher).
-  - [x] `ExerciseLibraryView` / `SplitsListView` → embeddable content (own NavigationStack/title removed).
-  - [x] `RootView`: Log · Library · Progress · Settings.
-  - [x] `trackliftsUITests` tab taps updated (Library + segment ids).
-- [x] Build: ** BUILD SUCCEEDED ** (iPhone 17 Pro, iOS 26.2).
+Plan: `~/.claude/plans/velvety-puzzling-hamming.md`
 
-## Website (`website/`)
-- [x] Brand-locked scaffold: `styles.css` (FORGE tokens + components + phone-mockup atoms), `app.js` (reveal/nav/count-up/parallax), `assets/mark.svg` (ember flame).
-- [x] Agent W-A: `index.html` flagship landing (wow hero + features + showcase + CTA).
-- [x] Agent W-B: `features.html` + `download.html`.
-- [x] Integrate + cohesion/QA pass (fixed dangling hero copy, dup class, empty App Store logos; added branded `assets/og.png`).
-- [x] Link integrity: all internal anchors/links resolve; every page wired to styles.css/app.js/og.png/nav/footer.
+## Round 1 — sane targets, pace step, debug button (DONE)
+- [x] `NutritionPlan`: clamp inputs, sex-aware floor, rate-derived `energyDelta`, pace model
+- [x] Onboarding: Target & pace step, prefill, weight guard, hero-number scale fix
+- [x] Settings: `#if DEBUG` Restart Onboarding; `MacroPreview` minimumScaleFactor
 
-## Review
-**App** — both changes shipped and compile (BUILD SUCCEEDED, iPhone 17 Pro / iOS 26.2):
-- Log rows now lead with the **date** (`.display(28)` "JUN 8") and a small ember weekday eyebrow above — the date is the hero.
-- Exercises + Splits merged into a single **Library** tab (`LibraryView`) with a custom FORGE ember segmented switcher (matched-geometry slide). Each half kept all functionality (search, favorites, custom/bodyweight, splits build/reorder/bulk-favorite). RootView is now Log · Library · Progress · Settings. UITests updated to tap Library + `librarySegment.*`.
+## Round 2 — mandatory flow, lean bulk, keyboard, cropping (DONE)
+- [x] Removed "Skip for now"; added **Lean bulk** goal + `FitnessGoal.direction`
+- [x] Goal weight typable; keyboard scroll fix (`ScrollViewReader` + `@FocusState`)
+- [x] Cropping fix: `.background(AppBackground())` instead of `ZStack` (unbounded-width gotcha)
+- [x] `--show-onboarding` hook + `OnboardingScreenshotTests`
 
-**Website** (`website/`) — spectacular 3-page marketing site in the app's FORGE language:
-- `styles.css` (FORGE tokens + components + in-browser phone-mockup atoms), `app.js` (scroll reveal, sticky nav, count-ups, parallax, mobile menu), `assets/mark.svg` (ember flame), `assets/og.png` (branded social card, rendered via rsvg-convert + bundled Bebas/Archivo).
-- `index.html`: cinematic hero (ember sparks + glow + floating Log-screen phone with the new date-hero rows), count-up stat band, 4 alternating feature sections (incl. the new combined Library segmented tab + Progress charts + pulsing New PR!), feature grid, how-it-works, 3-device showcase, CTA.
-- `features.html`: deep numbered tour + spec band + FAQ accordions. `download.html`: conversion hero + requirement tiles + steps.
-- Built by 2 parallel agents against the brand-locked scaffold; QA'd for cohesion + link integrity.
+## Round 3 — recomp, tickers, custom pace (DONE)
+- [x] **Recomp** goal — maintenance calories + 2.0 g/kg protein (direction 0 → skips pace step)
+- [x] **Swipeable sliders** on age / height / weight / goal weight (ember-tinted `Slider`
+      alongside the +/- steppers; weight also gained steppers) via `tickerStepper` / `tickerField`
+- [x] **Custom pace** — 4th pace with its own rate slider + steppers, dynamic
+      Sustainable/Aggressive badge; scrolls into view when picked
+- [x] Model refactor: rate-based `dailyEnergyDelta(goal:weeklyRateKg:)` + `weeklyRateKg(...)`
+      core, pace-based convenience overloads kept; `Profile` stores pace + custom rate
+- [x] Tests: recomp (maintenance + higher protein, skips pace), custom rate drives delta/timeframe + stays clamped
 
-To preview: open `website/index.html` (needs internet for Google Fonts).
+## Verification (Round 3)
+- `NutritionPlanTests` — **14/14 pass** (added recomp + custom-rate tests).
+- `OnboardingScreenshotTests` — drove the flow; inspected all 9 states. Confirmed: Recomp in the
+  goal list; sliders on every numeric input; weight field above the keyboard; Custom pace shows its
+  rate control + badge; plan reads "…at a custom pace". No cropping.
+- `** TEST SUCCEEDED **` (build clean, iOS 17 target).

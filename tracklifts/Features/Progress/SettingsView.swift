@@ -12,6 +12,8 @@ struct SettingsView: View {
     @AppStorage(NutritionGoals.proteinKey) private var goalProtein = NutritionGoals.defaultProtein
     @AppStorage(NutritionGoals.carbsKey) private var goalCarbs = NutritionGoals.defaultCarbs
     @AppStorage(NutritionGoals.fatKey) private var goalFat = NutritionGoals.defaultFat
+    @AppStorage(Profile.goalKey) private var goalRaw = FitnessGoal.maintain.rawValue
+    @AppStorage(Profile.didOnboardKey) private var didOnboard = false
 
     var body: some View {
         NavigationStack {
@@ -70,12 +72,28 @@ struct SettingsView: View {
                     .buttonStyle(.plain)
 
                     VStack(alignment: .leading, spacing: 14) {
-                        SectionLabel(title: "Nutrition Goals", systemImage: "target")
+                        SectionLabel(title: "Daily Targets", systemImage: "target")
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("GOAL").font(.sans(10, .bold)).tracking(1.2).foregroundStyle(Palette.inkSecondary)
+                                Text(FitnessGoal(rawValue: goalRaw)?.label ?? "Maintain")
+                                    .font(.sans(16, .bold)).foregroundStyle(Palette.ember)
+                            }
+                            Spacer()
+                            Button { didOnboard = false } label: {
+                                Text("Recalculate")
+                                    .font(.sans(13, .bold)).foregroundStyle(Palette.ember)
+                                    .padding(.horizontal, 12).padding(.vertical, 8)
+                                    .background(Palette.ember.opacity(0.14), in: .capsule)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        Rectangle().fill(Palette.hairline).frame(height: 1)
                         goalRow("Energy", value: $goalEnergy, unit: "kcal")
                         goalRow("Protein", value: $goalProtein, unit: "g")
                         goalRow("Carbs", value: $goalCarbs, unit: "g")
                         goalRow("Fat", value: $goalFat, unit: "g")
-                        Text("Daily targets for the food diary. Set what works for you; personalized targets arrive in a later update.")
+                        Text("Set from your goal during setup. Recalculate to redo it, or fine-tune any value.")
                             .font(.sans(12))
                             .foregroundStyle(Palette.inkSecondary)
                     }
@@ -86,6 +104,28 @@ struct SettingsView: View {
                         row("Version", "1.0")
                     }
                     .cardStyle(padding: 18)
+
+                    #if DEBUG
+                    VStack(alignment: .leading, spacing: 14) {
+                        SectionLabel(title: "Developer", systemImage: "ladybug.fill")
+                        Button {
+                            Profile.reset()
+                            didOnboard = false
+                        } label: {
+                            HStack {
+                                Text("Restart Onboarding")
+                                    .font(.sans(15, .semibold)).foregroundStyle(Palette.ink)
+                                Spacer()
+                                Image(systemName: "arrow.counterclockwise")
+                                    .font(.system(size: 14, weight: .bold)).foregroundStyle(Palette.ember)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        Text("Clears your saved profile and replays the first-run onboarding. Debug builds only.")
+                            .font(.sans(12)).foregroundStyle(Palette.inkSecondary)
+                    }
+                    .cardStyle(padding: 18)
+                    #endif
                 }
                 .padding(20)
             }
