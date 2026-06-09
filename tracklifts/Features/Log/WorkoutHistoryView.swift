@@ -2,7 +2,8 @@
 //  WorkoutHistoryView.swift
 //  tracklifts
 //
-//  The "Log" tab: your past sessions, and the entry point for logging a new one.
+//  The "Log" segment of the Train tab: your past sessions, and the entry
+//  point for logging a new one. Embedded inside `TrainView`'s NavigationStack.
 //
 
 import SwiftUI
@@ -10,97 +11,72 @@ import SwiftData
 
 struct WorkoutHistoryView: View {
     @Environment(\.modelContext) private var context
-    @AppStorage("weightUnit") private var unit: WeightUnit = .kg
 
     @Query(sort: \WorkoutSession.date, order: .reverse) private var sessions: [WorkoutSession]
     @State private var editingSession: WorkoutSession?
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    ScreenHeader(eyebrow: "Train. Track. Repeat.", title: "Training Log")
-                        .padding(.top, 8)
-                        .appearLift(0)
-
-                    EmberButton(title: "Log Today's Workout", systemImage: "plus") {
-                        startNewSession()
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .center) {
+                    Eyebrow(text: sessions.isEmpty ? "Your sessions" : "\(sessions.count) sessions")
+                    Spacer()
+                    Button {
+                        editingSession = WorkoutSession.blank(in: context)
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(.black)
+                            .frame(width: 42, height: 42)
+                            .background(Grad.ember, in: .circle)
+                            .shadow(color: Palette.ember.opacity(0.5), radius: 10, y: 4)
                     }
-                    .appearLift(1)
+                    .accessibilityIdentifier("addWorkout")
+                    .accessibilityLabel("Log Workout")
+                }
+                .padding(.top, 2)
+                .appearLift(0)
 
-                    if sessions.isEmpty {
-                        EmptyStateView(symbol: "square.and.pencil",
-                                       title: "No Workouts Yet",
-                                       message: "Hit the button above to record your first session.")
-                            .padding(.top, 20)
-                            .appearLift(2)
-                    } else {
-                        Text("History")
-                            .font(.sans(13, .bold)).tracking(1.5)
-                            .foregroundStyle(Palette.inkSecondary)
-                            .padding(.top, 6)
-                            .appearLift(2)
-
-                        LazyVStack(spacing: 12) {
-                            ForEach(Array(sessions.enumerated()), id: \.element.persistentModelID) { index, session in
-                                NavigationLink {
-                                    LogWorkoutView(session: session)
-                                } label: {
-                                    SessionRow(session: session)
-                                }
-                                .buttonStyle(.plain)
-                                .contextMenu {
-                                    Button {
-                                        repeatWorkout(session)
-                                    } label: { Label("Repeat Workout", systemImage: "arrow.clockwise") }
-                                    Divider()
-                                    Button(role: .destructive) {
-                                        context.delete(session)
-                                    } label: { Label("Delete", systemImage: "trash") }
-                                }
-                                .appearLift(min(index + 3, 8))
+                if sessions.isEmpty {
+                    EmptyStateView(symbol: "square.and.pencil",
+                                   title: "No Workouts Yet",
+                                   message: "Hit + above to record your first session — or start from Today.")
+                        .padding(.top, 20)
+                        .appearLift(1)
+                } else {
+                    LazyVStack(spacing: 12) {
+                        ForEach(Array(sessions.enumerated()), id: \.element.persistentModelID) { index, session in
+                            NavigationLink {
+                                LogWorkoutView(session: session)
+                            } label: {
+                                SessionRow(session: session)
                             }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                Button {
+                                    editingSession = WorkoutSession.repeated(from: session, in: context)
+                                } label: { Label("Repeat Workout", systemImage: "arrow.clockwise") }
+                                Divider()
+                                Button(role: .destructive) {
+                                    context.delete(session)
+                                } label: { Label("Delete", systemImage: "trash") }
+                            }
+                            .appearLift(min(index + 1, 8))
                         }
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 20)
-                .padding(.top, 8)
-                .padding(.bottom, 30)
             }
-            .scrollIndicators(.hidden)
-            .background(AppBackground())
-            .navigationBarHidden(true)
-            .sheet(item: $editingSession) { session in
-                NavigationStack {
-                    LogWorkoutView(session: session, isNew: true)
-                }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 20)
+            .padding(.top, 4)
+            .padding(.bottom, 30)
+        }
+        .scrollIndicators(.hidden)
+        .sheet(item: $editingSession) { session in
+            NavigationStack {
+                LogWorkoutView(session: session, isNew: true)
             }
         }
-    }
-
-    private func startNewSession() {
-        let session = WorkoutSession(date: .now)
-        context.insert(session)
-        editingSession = session
-    }
-
-    /// Clones a past session's exercises and sets into a fresh session for today.
-    private func repeatWorkout(_ source: WorkoutSession) {
-        let new = WorkoutSession(date: .now, title: source.title)
-        context.insert(new)
-        for entry in source.orderedEntries {
-            guard let exercise = entry.exercise else { continue }
-            let newEntry = LoggedExercise(exercise: exercise, order: entry.order)
-            newEntry.session = new
-            context.insert(newEntry)
-            for set in entry.orderedSets {
-                let newSet = LoggedSet(reps: set.reps, weight: set.weight, order: set.order)
-                newSet.loggedExercise = newEntry
-                context.insert(newSet)
-            }
-        }
-        editingSession = new
     }
 }
 

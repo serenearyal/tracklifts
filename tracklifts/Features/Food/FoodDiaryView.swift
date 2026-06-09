@@ -49,15 +49,6 @@ struct FoodDiaryView: View {
         return allEntries.filter { Calendar.current.isDate($0.date, inSameDayAs: prev) }
     }
 
-    private var defaultMealForNow: Meal {
-        switch Calendar.current.component(.hour, from: .now) {
-        case ..<11: return .breakfast
-        case 11..<15: return .lunch
-        case 15..<21: return .dinner
-        default: return .snacks
-        }
-    }
-
     var body: some View {
         NavigationStack {
             List {
@@ -90,7 +81,7 @@ struct FoodDiaryView: View {
     // MARK: - Header pieces
 
     private var searchBar: some View {
-        Button { sheet = .search(defaultMealForNow) } label: {
+        Button { sheet = .search(.defaultForNow) } label: {
             HStack(spacing: 9) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 14, weight: .semibold)).foregroundStyle(Palette.inkSecondary)
@@ -292,45 +283,6 @@ private extension View {
         self.listRowInsets(EdgeInsets(top: top, leading: 20, bottom: bottom, trailing: 20))
             .listRowSeparator(.hidden)
             .listRowBackground(Color.clear)
-    }
-}
-
-// MARK: - Reusable bars
-
-struct MacroProgressBar: View {
-    let value: Double
-    let goal: Double
-    var color: Color = Palette.ember
-
-    var body: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                Capsule().fill(Palette.surfaceRaised)
-                Capsule().fill(color)
-                    .frame(width: max(0, min(1, goal > 0 ? value / goal : 0)) * geo.size.width)
-            }
-        }
-        .frame(height: 8)
-    }
-}
-
-struct MacroStat: View {
-    let label: String
-    let value: Double
-    let goal: Double
-    let color: Color
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 4) {
-                Circle().fill(color).frame(width: 7, height: 7)
-                Text(label.uppercased()).font(.sans(10, .bold)).tracking(0.6).foregroundStyle(Palette.inkSecondary)
-            }
-            Text("\(Int(value.rounded()))g").font(.sans(16, .bold)).foregroundStyle(Palette.ink)
-            MacroProgressBar(value: value, goal: goal, color: color)
-            Text("of \(Int(goal))g").font(.sans(10)).foregroundStyle(Palette.inkTertiary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

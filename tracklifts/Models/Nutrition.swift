@@ -116,6 +116,16 @@ enum Meal: String, CaseIterable, Identifiable, Codable {
     }
 
     var order: Int { Meal.allCases.firstIndex(of: self) ?? 0 }
+
+    /// The meal a quick-add most likely belongs to right now.
+    static var defaultForNow: Meal {
+        switch Calendar.current.component(.hour, from: .now) {
+        case ..<11: .breakfast
+        case 11..<15: .lunch
+        case 15..<21: .dinner
+        default: .snacks
+        }
+    }
 }
 
 // MARK: - Formatting helpers

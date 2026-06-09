@@ -102,3 +102,35 @@ final class LoggedSet {
         return w * (1.0 + Double(reps) / 30.0)
     }
 }
+
+// MARK: - Session factories
+
+extension WorkoutSession {
+    /// Inserts and returns a fresh, empty session dated now. Callers hand it
+    /// straight to the new-workout sheet.
+    static func blank(in context: ModelContext) -> WorkoutSession {
+        let session = WorkoutSession(date: .now)
+        context.insert(session)
+        return session
+    }
+
+    /// Clones a past session's exercises and sets into a fresh session for
+    /// today. Each child is inserted as it's created (SwiftData on iOS 17
+    /// crashes when to-many relationships of un-inserted models are touched).
+    static func repeated(from source: WorkoutSession, in context: ModelContext) -> WorkoutSession {
+        let new = WorkoutSession(date: .now, title: source.title)
+        context.insert(new)
+        for entry in source.orderedEntries {
+            guard let exercise = entry.exercise else { continue }
+            let newEntry = LoggedExercise(exercise: exercise, order: entry.order)
+            newEntry.session = new
+            context.insert(newEntry)
+            for set in entry.orderedSets {
+                let newSet = LoggedSet(reps: set.reps, weight: set.weight, order: set.order)
+                newSet.loggedExercise = newEntry
+                context.insert(newSet)
+            }
+        }
+        return new
+    }
+}

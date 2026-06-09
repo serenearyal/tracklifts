@@ -225,3 +225,9 @@ pure food app can.
   via Mifflin-St Jeor → TDEE → goal adjustment; editable/re-runnable in Settings ("Recalculate").
   Build green; onboarding verified rendering on the iOS 17.0 simulator. _(Partial Phase 2 "auto
   targets": energy + macros done from goal; DRI micronutrient targets still pending the data work.)_
+- _2026-06-09_ — **IA restructure (5 tabs → 4):** new **Today** dashboard tab (today's energy/macros
+  vs. targets, today's training + repeat-last, body-weight card + quick log, this-week strip);
+  **Train** tab merges the old Log + Library behind a Log | Splits | Exercises switcher; Settings
+  demoted to a gear pushed from Today. Frees the tab bar for the roadmap: capture sheet + energy
+  balance land on Today (Phases 4–5), micros/water/recipes inside Food (Phases 2–3), correlations
+  in Progress (Phase 5).

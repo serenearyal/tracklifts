@@ -10,22 +10,31 @@
 import SwiftUI
 import SwiftData
 
+/// The app's top-level destinations. Today holds the selection binding so its
+/// cards can jump straight to a sibling tab.
+enum AppTab: Hashable {
+    case today, train, food, progress
+}
+
 struct RootView: View {
     @Environment(\.modelContext) private var context
     @AppStorage(Profile.didOnboardKey) private var didOnboard = false
+    @State private var selectedTab: AppTab = .today
 
     var body: some View {
-        TabView {
-            WorkoutHistoryView()
-                .tabItem { Label("Log", systemImage: "square.and.pencil") }
+        TabView(selection: $selectedTab) {
+            TodayView(selectedTab: $selectedTab)
+                .tabItem { Label("Today", systemImage: "house.fill") }
+                .tag(AppTab.today)
+            TrainView()
+                .tabItem { Label("Train", systemImage: "dumbbell.fill") }
+                .tag(AppTab.train)
             FoodDiaryView()
                 .tabItem { Label("Food", systemImage: "fork.knife") }
-            LibraryView()
-                .tabItem { Label("Library", systemImage: "square.stack.3d.up.fill") }
+                .tag(AppTab.food)
             ProgressOverviewView()
                 .tabItem { Label("Progress", systemImage: "chart.xyaxis.line") }
-            SettingsView()
-                .tabItem { Label("Settings", systemImage: "gearshape.fill") }
+                .tag(AppTab.progress)
         }
         .task {
             // UI-test hook: start from a clean store for deterministic runs.

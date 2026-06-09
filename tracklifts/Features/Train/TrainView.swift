@@ -1,36 +1,38 @@
 //
-//  LibraryView.swift
+//  TrainView.swift
 //  tracklifts
 //
-//  The "Library" tab unifies the movement catalog and your training splits
-//  behind a single FORGE-styled segmented switcher, so planning lives in one
-//  place. Each half keeps its own scroll, search, and actions; this view owns
-//  the shared NavigationStack + atmosphere.
+//  The "Train" tab unifies everything training: the workout log, your splits,
+//  and the movement catalog behind a single FORGE-styled segmented switcher.
+//  Each segment keeps its own scroll, search, and actions; this view owns the
+//  shared NavigationStack + atmosphere.
 //
 
 import SwiftUI
 import SwiftData
 
-enum LibraryMode: String, CaseIterable, Identifiable {
-    case exercises = "Exercises"
+enum TrainMode: String, CaseIterable, Identifiable {
+    case log = "Log"
     case splits = "Splits"
+    case exercises = "Exercises"
     var id: Self { self }
 }
 
-struct LibraryView: View {
-    @State private var mode: LibraryMode = .exercises
+struct TrainView: View {
+    @State private var mode: TrainMode = .log
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                LibraryModeSwitcher(mode: $mode)
+                TrainModeSwitcher(mode: $mode)
                     .padding(.horizontal, 20)
                     .padding(.top, 10)
                     .padding(.bottom, 6)
 
                 switch mode {
-                case .exercises: ExerciseLibraryView()
+                case .log: WorkoutHistoryView()
                 case .splits: SplitsListView()
+                case .exercises: ExerciseLibraryView()
                 }
             }
             .background(AppBackground())
@@ -39,15 +41,15 @@ struct LibraryView: View {
     }
 }
 
-/// Two-way ember pill switcher with a sliding highlight — the "title" of the
-/// Library tab and the control that swaps its content.
-struct LibraryModeSwitcher: View {
-    @Binding var mode: LibraryMode
+/// Three-way ember pill switcher with a sliding highlight — the "title" of the
+/// Train tab and the control that swaps its content.
+struct TrainModeSwitcher: View {
+    @Binding var mode: TrainMode
     @Namespace private var ns
 
     var body: some View {
         HStack(spacing: 4) {
-            ForEach(LibraryMode.allCases) { item in
+            ForEach(TrainMode.allCases) { item in
                 segment(item)
             }
         }
@@ -56,7 +58,7 @@ struct LibraryModeSwitcher: View {
         .overlay(Capsule().strokeBorder(Palette.hairline, lineWidth: 1))
     }
 
-    private func segment(_ item: LibraryMode) -> some View {
+    private func segment(_ item: TrainMode) -> some View {
         let selected = (item == mode)
         return Button {
             withAnimation(.snappy(duration: 0.28)) { mode = item }
@@ -64,6 +66,8 @@ struct LibraryModeSwitcher: View {
             Text(item.rawValue.uppercased())
                 .font(.sans(13, .bold))
                 .tracking(1.5)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
                 .foregroundStyle(selected ? Color.black : Palette.inkSecondary)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 11)
@@ -71,7 +75,7 @@ struct LibraryModeSwitcher: View {
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .accessibilityIdentifier("librarySegment.\(item.rawValue.lowercased())")
+        .accessibilityIdentifier("trainSegment.\(item.rawValue.lowercased())")
     }
 
     @ViewBuilder
@@ -79,15 +83,17 @@ struct LibraryModeSwitcher: View {
         if selected {
             Capsule()
                 .fill(Grad.ember)
-                .matchedGeometryEffect(id: "librarySeg", in: ns)
+                .matchedGeometryEffect(id: "trainSeg", in: ns)
                 .shadow(color: Palette.ember.opacity(0.40), radius: 8, y: 3)
         }
     }
 }
 
 #Preview {
-    LibraryView()
+    TrainView()
         .modelContainer(for: [
             Exercise.self, Split.self, SplitDay.self, SplitItem.self,
+            WorkoutSession.self, LoggedExercise.self, LoggedSet.self,
         ], inMemory: true)
+        .preferredColorScheme(.dark)
 }

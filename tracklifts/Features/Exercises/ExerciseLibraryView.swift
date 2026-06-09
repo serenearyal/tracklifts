@@ -2,8 +2,8 @@
 //  ExerciseLibraryView.swift
 //  tracklifts
 //
-//  The "Exercises" half of the Library tab: the searchable movement catalog,
-//  grouped by muscle. Embedded inside `LibraryView`'s NavigationStack.
+//  The "Exercises" segment of the Train tab: the searchable movement catalog,
+//  grouped by muscle. Embedded inside `TrainView`'s NavigationStack.
 //
 
 import SwiftUI

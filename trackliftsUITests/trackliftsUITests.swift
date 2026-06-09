@@ -22,17 +22,17 @@ final class trackliftsUITests: XCTestCase {
 
         let bench = NSPredicate(format: "label CONTAINS 'Barbell Bench Press'")
 
-        // Log tab loaded (data-independent — other tests may have seeded the store).
+        // Today tab loaded (data-independent — other tests may have seeded the store).
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'log today'")).firstMatch.waitForExistence(timeout: 5))
 
-        // Exercises tab — seeded library should be present.
-        app.tabBars.buttons["Library"].tap()
+        // Train tab, Exercises segment — seeded library should be present.
+        app.tabBars.buttons["Train"].tap()
+        app.buttons["trainSegment.exercises"].tap()
         XCTAssertTrue(app.buttons.matching(bench).firstMatch.waitForExistence(timeout: 5))
         snapshot(app, name: "exercises")
 
-        // Splits tab — create a split (seeds Push/Pull/Legs days).
-        app.tabBars.buttons["Library"].tap()
-        app.buttons["librarySegment.splits"].tap()
+        // Splits segment — create a split (seeds Push/Pull/Legs days).
+        app.buttons["trainSegment.splits"].tap()
         app.buttons["addSplit"].firstMatch.tap()
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] 'push'")).firstMatch.waitForExistence(timeout: 5))
         snapshot(app, name: "split-editor")
@@ -40,8 +40,8 @@ final class trackliftsUITests: XCTestCase {
         // Progress tab.
         app.tabBars.buttons["Progress"].tap()
 
-        // Log a workout: add an exercise.
-        app.tabBars.buttons["Log"].tap()
+        // Log a workout from Today: add an exercise.
+        app.tabBars.buttons["Today"].tap()
         app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'log today'")).firstMatch.tap()
         XCTAssertTrue(app.staticTexts["Add Exercise"].waitForExistence(timeout: 5))
         app.staticTexts["Add Exercise"].tap()
@@ -64,7 +64,7 @@ final class trackliftsUITests: XCTestCase {
 
         // Open the most recent session — it's the all-time best, so it should
         // show the PR badge and a positive session-over-session delta.
-        app.tabBars.buttons["Log"].tap()
+        app.tabBars.buttons["Train"].tap()
         // The most recent session card lists its exercises in its label.
         let topSession = app.buttons.containing(NSPredicate(format: "label CONTAINS 'Barbell Bench Press'")).firstMatch
         XCTAssertTrue(topSession.waitForExistence(timeout: 5))
@@ -79,7 +79,8 @@ final class trackliftsUITests: XCTestCase {
         app.navigationBars.buttons.element(boundBy: 0).tap() // back
 
         // Exercises library.
-        app.tabBars.buttons["Library"].tap()
+        app.tabBars.buttons["Train"].tap()
+        app.buttons["trainSegment.exercises"].tap()
         XCTAssertTrue(app.buttons.containing(NSPredicate(format: "label CONTAINS 'Barbell Bench Press'")).firstMatch.waitForExistence(timeout: 5))
         snapshot(app, name: "exercises-library")
 
@@ -92,8 +93,8 @@ final class trackliftsUITests: XCTestCase {
         snapshot(app, name: "exercise-chart")
 
         // Splits — open the seeded split to show bulk-favorite + day progress entry.
-        app.tabBars.buttons["Library"].tap()
-        app.buttons["librarySegment.splits"].tap()
+        app.tabBars.buttons["Train"].tap()
+        app.buttons["trainSegment.splits"].tap()
         snapshot(app, name: "splits")
         app.buttons.matching(NSPredicate(format: "label CONTAINS 'Push Pull Legs'")).firstMatch.tap()
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] 'favorit'")).firstMatch.waitForExistence(timeout: 5),
@@ -123,16 +124,18 @@ final class trackliftsUITests: XCTestCase {
         app.launchArguments += ["--reset-store"]
         app.launch()
 
-        // Settings is its own tab — brand lockup + body-weight field.
-        app.tabBars.buttons["Settings"].tap()
+        // Settings is pushed from Today's gear — brand lockup + body-weight field.
+        app.tabBars.buttons["Today"].tap()
+        app.buttons["settingsButton"].tap()
         XCTAssertTrue(app.staticTexts["TRACKLIFTS"].waitForExistence(timeout: 5),
                       "Settings should show the TrackLifts brand lockup")
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] 'body weight'")).firstMatch.exists,
                       "Settings should offer a body-weight field")
         snapshot(app, name: "settings-brand-bodyweight")
+        app.navigationBars.buttons.element(boundBy: 0).tap() // back to Today
 
         // Log a bodyweight exercise (a sit-up).
-        app.tabBars.buttons["Log"].tap()
+        app.tabBars.buttons["Today"].tap()
         app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'log today'")).firstMatch.tap()
         XCTAssertTrue(app.staticTexts["Add Exercise"].waitForExistence(timeout: 5))
         addExercise(app, label: "Dips (Chest)")
@@ -158,7 +161,8 @@ final class trackliftsUITests: XCTestCase {
 
         // Exercises library surfaces the BODYWEIGHT tag (non-lazy list, so the
         // tag is in the tree even if a particular row is below the fold).
-        app.tabBars.buttons["Library"].tap()
+        app.tabBars.buttons["Train"].tap()
+        app.buttons["trainSegment.exercises"].tap()
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label == 'BODYWEIGHT'")).firstMatch.waitForExistence(timeout: 5),
                       "Bodyweight exercises should be tagged in the library")
         snapshot(app, name: "library-bodyweight-tag")

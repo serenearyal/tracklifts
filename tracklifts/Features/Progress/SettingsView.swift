@@ -2,6 +2,9 @@
 //  SettingsView.swift
 //  tracklifts
 //
+//  Pushed from the Today tab's gear button (no longer a tab of its own), so
+//  it must not own a NavigationStack.
+//
 
 import SwiftUI
 
@@ -16,125 +19,123 @@ struct SettingsView: View {
     @AppStorage(Profile.didOnboardKey) private var didOnboard = false
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    brandLockup
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                brandLockup
 
-                    VStack(alignment: .leading, spacing: 14) {
-                        SectionLabel(title: "Units", systemImage: "scalemass.fill")
-                        Picker("Weight Unit", selection: $unit) {
-                            ForEach(WeightUnit.allCases) { u in
-                                Text(u.label.uppercased()).tag(u)
-                            }
+                VStack(alignment: .leading, spacing: 14) {
+                    SectionLabel(title: "Units", systemImage: "scalemass.fill")
+                    Picker("Weight Unit", selection: $unit) {
+                        ForEach(WeightUnit.allCases) { u in
+                            Text(u.label.uppercased()).tag(u)
                         }
-                        .pickerStyle(.segmented)
-                        Text("Changing units relabels values; it does not convert previously logged weights.")
-                            .font(.sans(12))
-                            .foregroundStyle(Palette.inkSecondary)
                     }
-                    .cardStyle(padding: 18)
+                    .pickerStyle(.segmented)
+                    Text("Changing units relabels values; it does not convert previously logged weights.")
+                        .font(.sans(12))
+                        .foregroundStyle(Palette.inkSecondary)
+                }
+                .cardStyle(padding: 18)
 
-                    NavigationLink {
-                        BodyWeightView()
-                    } label: {
-                        VStack(alignment: .leading, spacing: 12) {
-                            SectionLabel(title: "Body Weight", systemImage: "figure")
-                            HStack(alignment: .firstTextBaseline) {
-                                if bodyWeight > 0 {
-                                    Text(bodyWeight.trimmedWeight)
-                                        .font(.display(30))
-                                        .foregroundStyle(Palette.ink)
-                                    Text(unit.label.uppercased())
-                                        .font(.sans(12, .bold)).tracking(1)
-                                        .foregroundStyle(Palette.inkSecondary)
-                                } else {
-                                    Text("Not set yet")
-                                        .font(.sans(16, .semibold))
-                                        .foregroundStyle(Palette.inkSecondary)
-                                }
-                                Spacer()
-                                Text("Open log")
+                NavigationLink {
+                    BodyWeightView()
+                } label: {
+                    VStack(alignment: .leading, spacing: 12) {
+                        SectionLabel(title: "Body Weight", systemImage: "figure")
+                        HStack(alignment: .firstTextBaseline) {
+                            if bodyWeight > 0 {
+                                Text(bodyWeight.trimmedWeight)
+                                    .font(.display(30))
+                                    .foregroundStyle(Palette.ink)
+                                Text(unit.label.uppercased())
                                     .font(.sans(12, .bold)).tracking(1)
-                                    .foregroundStyle(Palette.ember)
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 12, weight: .bold))
-                                    .foregroundStyle(Palette.inkTertiary)
-                            }
-                            Text("Logged over time to chart your trend — and to score bodyweight lifts (pull-ups, dips…) as body weight plus any added load.")
-                                .font(.sans(12))
-                                .foregroundStyle(Palette.inkSecondary)
-                                .multilineTextAlignment(.leading)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .cardStyle(padding: 18)
-                    }
-                    .buttonStyle(.plain)
-
-                    VStack(alignment: .leading, spacing: 14) {
-                        SectionLabel(title: "Daily Targets", systemImage: "target")
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("GOAL").font(.sans(10, .bold)).tracking(1.2).foregroundStyle(Palette.inkSecondary)
-                                Text(FitnessGoal(rawValue: goalRaw)?.label ?? "Maintain")
-                                    .font(.sans(16, .bold)).foregroundStyle(Palette.ember)
+                                    .foregroundStyle(Palette.inkSecondary)
+                            } else {
+                                Text("Not set yet")
+                                    .font(.sans(16, .semibold))
+                                    .foregroundStyle(Palette.inkSecondary)
                             }
                             Spacer()
-                            Button { didOnboard = false } label: {
-                                Text("Recalculate")
-                                    .font(.sans(13, .bold)).foregroundStyle(Palette.ember)
-                                    .padding(.horizontal, 12).padding(.vertical, 8)
-                                    .background(Palette.ember.opacity(0.14), in: .capsule)
-                            }
-                            .buttonStyle(.plain)
+                            Text("Open log")
+                                .font(.sans(12, .bold)).tracking(1)
+                                .foregroundStyle(Palette.ember)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(Palette.inkTertiary)
                         }
-                        Rectangle().fill(Palette.hairline).frame(height: 1)
-                        goalRow("Energy", value: $goalEnergy, unit: "kcal")
-                        goalRow("Protein", value: $goalProtein, unit: "g")
-                        goalRow("Carbs", value: $goalCarbs, unit: "g")
-                        goalRow("Fat", value: $goalFat, unit: "g")
-                        Text("Set from your goal during setup. Recalculate to redo it, or fine-tune any value.")
+                        Text("Logged over time to chart your trend — and to score bodyweight lifts (pull-ups, dips…) as body weight plus any added load.")
                             .font(.sans(12))
                             .foregroundStyle(Palette.inkSecondary)
+                            .multilineTextAlignment(.leading)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .cardStyle(padding: 18)
+                }
+                .buttonStyle(.plain)
 
-                    VStack(alignment: .leading, spacing: 14) {
-                        SectionLabel(title: "About", systemImage: "info.circle.fill")
-                        row("Version", "1.0")
-                    }
-                    .cardStyle(padding: 18)
-
-                    #if DEBUG
-                    VStack(alignment: .leading, spacing: 14) {
-                        SectionLabel(title: "Developer", systemImage: "ladybug.fill")
-                        Button {
-                            Profile.reset()
-                            didOnboard = false
-                        } label: {
-                            HStack {
-                                Text("Restart Onboarding")
-                                    .font(.sans(15, .semibold)).foregroundStyle(Palette.ink)
-                                Spacer()
-                                Image(systemName: "arrow.counterclockwise")
-                                    .font(.system(size: 14, weight: .bold)).foregroundStyle(Palette.ember)
-                            }
+                VStack(alignment: .leading, spacing: 14) {
+                    SectionLabel(title: "Daily Targets", systemImage: "target")
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("GOAL").font(.sans(10, .bold)).tracking(1.2).foregroundStyle(Palette.inkSecondary)
+                            Text(FitnessGoal(rawValue: goalRaw)?.label ?? "Maintain")
+                                .font(.sans(16, .bold)).foregroundStyle(Palette.ember)
+                        }
+                        Spacer()
+                        Button { didOnboard = false } label: {
+                            Text("Recalculate")
+                                .font(.sans(13, .bold)).foregroundStyle(Palette.ember)
+                                .padding(.horizontal, 12).padding(.vertical, 8)
+                                .background(Palette.ember.opacity(0.14), in: .capsule)
                         }
                         .buttonStyle(.plain)
-                        Text("Clears your saved profile and replays the first-run onboarding. Debug builds only.")
-                            .font(.sans(12)).foregroundStyle(Palette.inkSecondary)
                     }
-                    .cardStyle(padding: 18)
-                    #endif
+                    Rectangle().fill(Palette.hairline).frame(height: 1)
+                    goalRow("Energy", value: $goalEnergy, unit: "kcal")
+                    goalRow("Protein", value: $goalProtein, unit: "g")
+                    goalRow("Carbs", value: $goalCarbs, unit: "g")
+                    goalRow("Fat", value: $goalFat, unit: "g")
+                    Text("Set from your goal during setup. Recalculate to redo it, or fine-tune any value.")
+                        .font(.sans(12))
+                        .foregroundStyle(Palette.inkSecondary)
                 }
-                .padding(20)
+                .cardStyle(padding: 18)
+
+                VStack(alignment: .leading, spacing: 14) {
+                    SectionLabel(title: "About", systemImage: "info.circle.fill")
+                    row("Version", "1.0")
+                }
+                .cardStyle(padding: 18)
+
+                #if DEBUG
+                VStack(alignment: .leading, spacing: 14) {
+                    SectionLabel(title: "Developer", systemImage: "ladybug.fill")
+                    Button {
+                        Profile.reset()
+                        didOnboard = false
+                    } label: {
+                        HStack {
+                            Text("Restart Onboarding")
+                                .font(.sans(15, .semibold)).foregroundStyle(Palette.ink)
+                            Spacer()
+                            Image(systemName: "arrow.counterclockwise")
+                                .font(.system(size: 14, weight: .bold)).foregroundStyle(Palette.ember)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    Text("Clears your saved profile and replays the first-run onboarding. Debug builds only.")
+                        .font(.sans(12)).foregroundStyle(Palette.inkSecondary)
+                }
+                .cardStyle(padding: 18)
+                #endif
             }
-            .scrollIndicators(.hidden)
-            .scrollDismissesKeyboard(.interactively)
-            .background(AppBackground())
-            .navigationTitle("Settings")
-            .navigationBarTitleDisplayMode(.inline)
+            .padding(20)
         }
+        .scrollIndicators(.hidden)
+        .scrollDismissesKeyboard(.interactively)
+        .background(AppBackground())
+        .navigationTitle("Settings")
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     /// Brand lockup: the ember mark over the condensed wordmark + tagline.

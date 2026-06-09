@@ -2,8 +2,8 @@
 //  SplitsListView.swift
 //  tracklifts
 //
-//  The "Splits" half of the Library tab: build and manage training routines.
-//  Embedded inside `LibraryView`'s NavigationStack.
+//  The "Splits" segment of the Train tab: build and manage training routines.
+//  Embedded inside `TrainView`'s NavigationStack.
 //
 
 import SwiftUI
