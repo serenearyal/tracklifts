@@ -10,8 +10,8 @@ Check items off as you go; the next unchecked phase is always what to do next.
 
 **Status:** ✅ **Phase 0 + Phase 1 engine shipped** (body-weight log; food search → log → diary →
 goals; build green, 258-food catalog). **Next: Phase 2** — micronutrient panel, auto targets/DRI,
-completeness score, HealthKit. A few Phase 1 polish items remain (favorite toggle, edit-entry,
-recents, true FTS, full USDA import).
+completeness score, HealthKit. Remaining Phase 1 polish: custom foods, true FTS, full USDA import — favorite toggle, tap-to-edit,
+and recents are now done.
 
 ---
 
@@ -121,8 +121,8 @@ latest weight. _Unlocks:_ the body-composition half of the wedge (Phase 5).
 - [x] **Food tab** (`FoodDiaryView`): day navigator, per-meal sections (B/L/D/Snacks), energy +
       P/C/F summary bars vs goals, entry rows (delete), copy-previous-day.
 - [x] Manual energy + macro targets (Settings) + progress vs target.
-- [ ] _Follow-ups (not blockers; some overlap Phase 3):_ favorite toggle in search, tap-to-edit an
-      entry, recents/quick-add, custom foods, true FTS, USDA/branded expansion.
+- [x] Mopped up: favorite toggle (search context menu), tap-to-edit/delete an entry, recents shortcut.
+- [ ] _Still open (overlap Phase 2/3):_ custom foods, quick-add, true FTS, USDA/branded expansion.
 
 **Shipped:** `Models/Nutrition.swift`, `Models/Food.swift`, `Data/FoodLibrary*.swift`,
 `Data/FoodSeedManager.swift`, `Features/Food/FoodDiaryView.swift`, `Features/Food/FoodSearchView.swift`;
@@ -215,3 +215,13 @@ pure food app can.
 - _2026-06-08_ — **Phase 1 engine shipped:** 258-food catalog (two parallel agents), nutrition
   models, search→log flow, Food diary tab + goals, new Food tab. Build green. Follow-ups: FTS,
   recents, edit-entry, favorite toggle, USDA/branded import.
+- _2026-06-08_ — **iOS 17 support:** target 26.2→17.0, classic TabView, SwiftData to-many-on-fresh
+  fix; verified on the iOS 17.0 simulator.
+- _2026-06-09_ — **Phase 1 mop-up:** favorite toggle in search, tap-to-edit/delete diary entries,
+  recents shortcut (+ shared MacroPreview). Build green; launches clean on iOS 17.0.
+- _2026-06-09_ — **Food UX + goal-based targets:** pinned top search bar + dedicated "Search foods"
+  entry, tappable favorite star (no long-press), swipe-to-delete diary entries (List-based). New
+  **onboarding flow** (goal → stats → activity → live plan reveal) that sets energy + macro targets
+  via Mifflin-St Jeor → TDEE → goal adjustment; editable/re-runnable in Settings ("Recalculate").
+  Build green; onboarding verified rendering on the iOS 17.0 simulator. _(Partial Phase 2 "auto
+  targets": energy + macros done from goal; DRI micronutrient targets still pending the data work.)_

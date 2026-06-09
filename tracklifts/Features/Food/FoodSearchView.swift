@@ -2,8 +2,9 @@
 //  FoodSearchView.swift
 //  tracklifts
 //
-//  The search-and-add engine (Phase 1): search the bundled food catalog, then
-//  pick a serving + quantity + meal and commit a snapshotted diary entry.
+//  The search-and-add engine (Phase 1): a pinned top search field, a Recent
+//  shortcut, a visible favorite star per row, then pick serving + quantity +
+//  meal and commit a snapshotted diary entry.
 //
 
 import SwiftUI
@@ -15,7 +16,9 @@ struct FoodSearchView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \FoodItem.name) private var foods: [FoodItem]
+    @Query(sort: \DiaryEntry.createdAt, order: .reverse) private var recentEntries: [DiaryEntry]
     @State private var searchText = ""
+    @FocusState private var searchFocused: Bool
 
     private var filtered: [FoodItem] {
         let base = searchText.isEmpty ? foods : foods.filter {
@@ -27,36 +30,108 @@ struct FoodSearchView: View {
         }
     }
 
+    /// Most-recently-logged distinct foods — a quick re-log shortcut.
+    private var recentFoods: [FoodItem] {
+        var seen = Set<PersistentIdentifier>()
+        var out: [FoodItem] = []
+        for entry in recentEntries {
+            guard let food = entry.food else { continue }
+            if seen.insert(food.persistentModelID).inserted { out.append(food) }
+            if out.count >= 8 { break }
+        }
+        return out
+    }
+
     var body: some View {
         NavigationStack {
-            ScrollView {
-                LazyVStack(spacing: 10) {
-                    if filtered.isEmpty {
-                        Text(foods.isEmpty ? "Loading foods…" : "No matches for “\(searchText)”")
-                            .font(.sans(15)).foregroundStyle(Palette.inkSecondary)
-                            .frame(maxWidth: .infinity).padding(.top, 50)
-                    }
-                    ForEach(filtered) { food in
-                        NavigationLink {
-                            LogFoodView(food: food, meal: meal, day: day) { dismiss() }
-                        } label: {
-                            FoodRow(food: food)
+            VStack(spacing: 0) {
+                searchField
+                ScrollView {
+                    LazyVStack(spacing: 10) {
+                        if searchText.isEmpty && !recentFoods.isEmpty {
+                            sectionHeader("Recent")
+                            ForEach(recentFoods) { food in foodLink(food) }
+                            sectionHeader("All foods")
                         }
-                        .buttonStyle(.plain)
+                        if filtered.isEmpty {
+                            Text(foods.isEmpty ? "Loading foods…" : "No matches for “\(searchText)”")
+                                .font(.sans(15)).foregroundStyle(Palette.inkSecondary)
+                                .frame(maxWidth: .infinity).padding(.top, 50)
+                        }
+                        ForEach(filtered) { food in foodLink(food) }
                     }
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 24)
                 }
-                .padding(20)
+                .scrollIndicators(.hidden)
+                .scrollDismissesKeyboard(.immediately)
             }
-            .scrollIndicators(.hidden)
             .background(AppBackground())
             .navigationTitle("Add to \(meal.label)")
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $searchText, prompt: "Search foods")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }.foregroundStyle(Palette.inkSecondary)
                 }
             }
+            .onAppear { searchFocused = true }
+        }
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 9) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Palette.inkSecondary)
+            TextField("Search foods", text: $searchText)
+                .focused($searchFocused)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .submitLabel(.search)
+                .font(.sans(16))
+                .foregroundStyle(Palette.ink)
+            if !searchText.isEmpty {
+                Button { searchText = "" } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(Palette.inkTertiary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 14).padding(.vertical, 12)
+        .background(Palette.surface, in: .rect(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Palette.hairline, lineWidth: 1))
+        .padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 8)
+    }
+
+    private func sectionHeader(_ text: String) -> some View {
+        HStack {
+            Text(text.uppercased())
+                .font(.sans(12, .bold)).tracking(1.5)
+                .foregroundStyle(Palette.inkSecondary)
+            Spacer()
+        }
+        .padding(.top, 6)
+    }
+
+    /// Full-row tap logs the food; the overlaid star toggles favorite without navigating.
+    private func foodLink(_ food: FoodItem) -> some View {
+        ZStack(alignment: .trailing) {
+            NavigationLink {
+                LogFoodView(food: food, meal: meal, day: day) { dismiss() }
+            } label: {
+                FoodRow(food: food)
+            }
+            .buttonStyle(.plain)
+
+            Button { food.isFavorite.toggle() } label: {
+                Image(systemName: food.isFavorite ? "star.fill" : "star")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(food.isFavorite ? Palette.gold : Palette.inkTertiary)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.trailing, 10)
         }
     }
 }
@@ -81,13 +156,42 @@ struct FoodRow: View {
                         .font(.sans(11)).foregroundStyle(Palette.inkSecondary).lineLimit(1)
                 }
             }
-            Spacer()
-            if food.isFavorite {
-                Image(systemName: "star.fill").font(.system(size: 12)).foregroundStyle(Palette.gold)
-            }
-            Image(systemName: "plus.circle.fill").font(.system(size: 20)).foregroundStyle(Palette.ember)
+            Spacer(minLength: 52) // room for the favorite-star overlay
         }
         .cardStyle(padding: 14)
+    }
+}
+
+/// Shared energy + macro readout used by the log + edit sheets.
+struct MacroPreview: View {
+    let nutrients: NutrientVector
+
+    var body: some View {
+        HStack(spacing: 0) {
+            cell(Int(nutrients.energy.rounded()).formatted(), "kcal", Palette.ember)
+            divider
+            cell("\(Int(nutrients.protein.rounded()))g", "Protein", Palette.up)
+            divider
+            cell("\(Int(nutrients.carbs.rounded()))g", "Carbs", Palette.gold)
+            divider
+            cell("\(Int(nutrients.fat.rounded()))g", "Fat", Color(hex: 0x4DABF7))
+        }
+        .padding(.vertical, 16)
+        .cardStyle(padding: 8)
+    }
+
+    private func cell(_ value: String, _ label: String, _ tint: Color) -> some View {
+        VStack(spacing: 3) {
+            Text(value).font(.display(26)).foregroundStyle(tint)
+                .lineLimit(1).minimumScaleFactor(0.6)
+                .contentTransition(.numericText())
+            Text(label.uppercased()).font(.sans(9, .semibold)).tracking(0.6).foregroundStyle(Palette.inkSecondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var divider: some View {
+        Rectangle().fill(Palette.hairline).frame(width: 1, height: 30)
     }
 }
 
@@ -123,7 +227,7 @@ struct LogFoodView: View {
                     }
                 }
 
-                nutritionPreview
+                MacroPreview(nutrients: nutrients)
 
                 VStack(alignment: .leading, spacing: 14) {
                     SectionLabel(title: "Serving", systemImage: "fork.knife")
@@ -183,32 +287,6 @@ struct LogFoodView: View {
                 .background(Palette.surfaceRaised, in: .circle)
         }
         .buttonStyle(.plain)
-    }
-
-    private var nutritionPreview: some View {
-        HStack(spacing: 0) {
-            previewStat(Int(nutrients.energy.rounded()).formatted(), "kcal", Palette.ember)
-            previewDivider
-            previewStat("\(Int(nutrients.protein.rounded()))g", "Protein", Palette.up)
-            previewDivider
-            previewStat("\(Int(nutrients.carbs.rounded()))g", "Carbs", Palette.gold)
-            previewDivider
-            previewStat("\(Int(nutrients.fat.rounded()))g", "Fat", Color(hex: 0x4DABF7))
-        }
-        .padding(.vertical, 16)
-        .cardStyle(padding: 8)
-    }
-
-    private func previewStat(_ value: String, _ label: String, _ tint: Color) -> some View {
-        VStack(spacing: 3) {
-            Text(value).font(.display(26)).foregroundStyle(tint).contentTransition(.numericText())
-            Text(label.uppercased()).font(.sans(9, .semibold)).tracking(0.6).foregroundStyle(Palette.inkSecondary)
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    private var previewDivider: some View {
-        Rectangle().fill(Palette.hairline).frame(width: 1, height: 30)
     }
 
     private func add() {

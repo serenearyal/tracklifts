@@ -2,13 +2,26 @@
 //  FoodDiaryView.swift
 //  tracklifts
 //
-//  The "Food" tab (Phase 1): a daily diary grouped by meal, with an energy +
-//  macro summary against your goals. Tapping a meal's add button opens the
-//  search-and-log flow.
+//  The "Food" tab (Phase 1): a daily diary grouped by meal with an energy +
+//  macro summary vs. your goals. A top search bar opens the catalog; entries
+//  swipe to delete and tap to edit. List-based for native swipe actions.
 //
 
 import SwiftUI
 import SwiftData
+
+/// One sheet at a time — adding a food, or editing an existing entry.
+private enum FoodSheet: Identifiable {
+    case search(Meal)
+    case edit(DiaryEntry)
+
+    var id: String {
+        switch self {
+        case .search(let meal): "search-\(meal.rawValue)"
+        case .edit(let entry): "edit-\(entry.persistentModelID.hashValue)"
+        }
+    }
+}
 
 struct FoodDiaryView: View {
     @Environment(\.modelContext) private var context
@@ -20,8 +33,7 @@ struct FoodDiaryView: View {
     @AppStorage(NutritionGoals.fatKey) private var goalFat = NutritionGoals.defaultFat
 
     @State private var day: Date = Calendar.current.startOfDay(for: .now)
-    @State private var searchMeal: Meal = .breakfast
-    @State private var showingSearch = false
+    @State private var sheet: FoodSheet?
 
     private var dayEntries: [DiaryEntry] {
         allEntries.filter { Calendar.current.isDate($0.date, inSameDayAs: day) }
@@ -37,32 +49,60 @@ struct FoodDiaryView: View {
         return allEntries.filter { Calendar.current.isDate($0.date, inSameDayAs: prev) }
     }
 
+    private var defaultMealForNow: Meal {
+        switch Calendar.current.component(.hour, from: .now) {
+        case ..<11: return .breakfast
+        case 11..<15: return .lunch
+        case 15..<21: return .dinner
+        default: return .snacks
+        }
+    }
+
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    dateNav.appearLift(0)
-                    summaryCard.appearLift(1)
+            List {
+                Section {
+                    dateNav.diaryRow(top: 8, bottom: 2)
+                    searchBar.diaryRow(top: 4, bottom: 2)
+                    summaryCard.diaryRow(top: 6, bottom: 2)
                     if dayEntries.isEmpty, !previousDayEntries.isEmpty {
-                        copyPreviousButton.appearLift(2)
-                    }
-                    ForEach(Array(Meal.allCases.enumerated()), id: \.element) { index, meal in
-                        mealSection(meal).appearLift(min(index + 2, 6))
+                        copyPreviousButton.diaryRow()
                     }
                 }
-                .padding(20)
-                .padding(.bottom, 30)
+                ForEach(Meal.allCases) { meal in
+                    mealSection(meal)
+                }
             }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
             .scrollIndicators(.hidden)
             .background(AppBackground())
             .navigationBarHidden(true)
-            .sheet(isPresented: $showingSearch) {
-                FoodSearchView(meal: searchMeal, day: day)
+            .sheet(item: $sheet) { item in
+                switch item {
+                case .search(let meal): FoodSearchView(meal: meal, day: day)
+                case .edit(let entry): EditDiaryEntrySheet(entry: entry)
+                }
             }
         }
     }
 
-    // MARK: - Date navigator
+    // MARK: - Header pieces
+
+    private var searchBar: some View {
+        Button { sheet = .search(defaultMealForNow) } label: {
+            HStack(spacing: 9) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 14, weight: .semibold)).foregroundStyle(Palette.inkSecondary)
+                Text("Search foods").font(.sans(15)).foregroundStyle(Palette.inkSecondary)
+                Spacer()
+            }
+            .padding(.horizontal, 14).padding(.vertical, 12)
+            .background(Palette.surface, in: .rect(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Palette.hairline, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
 
     private var dateNav: some View {
         HStack(spacing: 12) {
@@ -82,7 +122,6 @@ struct FoodDiaryView: View {
                 .opacity(isToday ? 0.3 : 1)
                 .disabled(isToday)
         }
-        .padding(.top, 8)
     }
 
     private func navButton(_ icon: String, _ action: @escaping () -> Void) -> some View {
@@ -171,61 +210,88 @@ struct FoodDiaryView: View {
         try? context.save()
     }
 
-    // MARK: - Meal sections
+    // MARK: - Meal section
 
     private func mealSection(_ meal: Meal) -> some View {
         let items = entries(for: meal)
         let kcal = items.reduce(0.0) { $0 + $1.kcal }
-        return VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Image(systemName: meal.symbol).font(.system(size: 13, weight: .bold)).foregroundStyle(Palette.ember)
-                Text(meal.label.uppercased()).font(.sans(13, .bold)).tracking(1.2).foregroundStyle(Palette.ink)
-                Spacer()
-                if kcal > 0 {
-                    Text("\(Int(kcal.rounded())) kcal").font(.sans(12, .semibold)).foregroundStyle(Palette.inkSecondary)
-                }
-                Button { searchMeal = meal; showingSearch = true } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 13, weight: .bold)).foregroundStyle(.black)
-                        .frame(width: 30, height: 30).background(Grad.ember, in: .circle)
-                }
-                .buttonStyle(.plain)
-            }
+        return Section {
             if items.isEmpty {
-                Button { searchMeal = meal; showingSearch = true } label: {
-                    Text("Add food")
-                        .font(.sans(13)).foregroundStyle(Palette.inkSecondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 12).padding(.horizontal, 14)
-                        .background(Palette.surface.opacity(0.5), in: .rect(cornerRadius: 14))
-                        .overlay(RoundedRectangle(cornerRadius: 14)
-                            .strokeBorder(Palette.hairline, style: StrokeStyle(lineWidth: 1, dash: [4, 4])))
-                }
-                .buttonStyle(.plain)
+                addFoodRow(meal).diaryRow(top: 2, bottom: 6)
             } else {
-                ForEach(items) { entry in entryRow(entry) }
+                ForEach(items) { entry in
+                    entryRow(entry)
+                        .diaryRow(top: 4, bottom: 4)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                context.delete(entry); try? context.save()
+                            } label: { Label("Delete", systemImage: "trash") }
+                        }
+                }
             }
+        } header: {
+            mealHeader(meal, kcal: kcal)
         }
     }
 
-    private func entryRow(_ entry: DiaryEntry) -> some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(entry.foodName).font(.sans(15, .semibold)).foregroundStyle(Palette.ink).lineLimit(1)
-                Text(entry.servingText).font(.sans(12)).foregroundStyle(Palette.inkSecondary)
-            }
+    private func mealHeader(_ meal: Meal, kcal: Double) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: meal.symbol).font(.system(size: 13, weight: .bold)).foregroundStyle(Palette.ember)
+            Text(meal.label).font(.sans(13, .bold)).tracking(1).foregroundStyle(Palette.ink).textCase(nil)
             Spacer()
-            HStack(alignment: .firstTextBaseline, spacing: 3) {
-                Text("\(Int(entry.kcal.rounded()))").font(.display(22)).foregroundStyle(Palette.ink)
-                Text("kcal").font(.sans(10, .semibold)).foregroundStyle(Palette.inkSecondary)
+            if kcal > 0 {
+                Text("\(Int(kcal.rounded())) kcal").font(.sans(12, .semibold)).foregroundStyle(Palette.inkSecondary)
             }
+            Button { sheet = .search(meal) } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 13, weight: .bold)).foregroundStyle(.black)
+                    .frame(width: 28, height: 28).background(Grad.ember, in: .circle)
+            }
+            .buttonStyle(.plain)
         }
-        .cardStyle(padding: 14)
-        .contextMenu {
-            Button(role: .destructive) {
-                context.delete(entry); try? context.save()
-            } label: { Label("Delete", systemImage: "trash") }
+        .listRowInsets(EdgeInsets(top: 12, leading: 20, bottom: 4, trailing: 20))
+    }
+
+    private func addFoodRow(_ meal: Meal) -> some View {
+        Button { sheet = .search(meal) } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "plus.circle.fill").foregroundStyle(Palette.ember)
+                Text("Add food").font(.sans(14)).foregroundStyle(Palette.inkSecondary)
+                Spacer()
+            }
+            .padding(.vertical, 11).padding(.horizontal, 14)
+            .background(Palette.surface.opacity(0.5), in: .rect(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(Palette.hairline, style: StrokeStyle(lineWidth: 1, dash: [4, 4])))
         }
+        .buttonStyle(.plain)
+    }
+
+    private func entryRow(_ entry: DiaryEntry) -> some View {
+        Button { sheet = .edit(entry) } label: {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(entry.foodName).font(.sans(15, .semibold)).foregroundStyle(Palette.ink).lineLimit(1)
+                    Text(entry.servingText).font(.sans(12)).foregroundStyle(Palette.inkSecondary)
+                }
+                Spacer()
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
+                    Text("\(Int(entry.kcal.rounded()))").font(.display(22)).foregroundStyle(Palette.ink)
+                    Text("kcal").font(.sans(10, .semibold)).foregroundStyle(Palette.inkSecondary)
+                }
+            }
+            .cardStyle(padding: 14)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private extension View {
+    /// Borderless full-bleed List row chrome over the app background.
+    func diaryRow(top: CGFloat = 6, bottom: CGFloat = 6) -> some View {
+        self.listRowInsets(EdgeInsets(top: top, leading: 20, bottom: bottom, trailing: 20))
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
     }
 }
 
@@ -265,5 +331,111 @@ struct MacroStat: View {
             Text("of \(Int(goal))g").font(.sans(10)).foregroundStyle(Palette.inkTertiary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+// MARK: - Edit entry
+
+struct EditDiaryEntrySheet: View {
+    @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
+    let entry: DiaryEntry
+
+    @State private var grams: Double
+    @State private var meal: Meal
+
+    init(entry: DiaryEntry) {
+        self.entry = entry
+        _grams = State(initialValue: entry.grams)
+        _meal = State(initialValue: entry.meal)
+    }
+
+    private var preview: NutrientVector {
+        if let food = entry.food { return food.nutrients(forGrams: grams) }
+        if entry.grams > 0 { return entry.nutrients.scaled(by: grams / entry.grams) }
+        return NutrientVector()
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(entry.foodName).font(.display(28)).foregroundStyle(Palette.ink)
+                        if !entry.brand.isEmpty {
+                            Text(entry.brand).font(.sans(13, .semibold)).foregroundStyle(Palette.inkSecondary)
+                        }
+                    }
+
+                    MacroPreview(nutrients: preview)
+
+                    VStack(alignment: .leading, spacing: 14) {
+                        SectionLabel(title: "Amount", systemImage: "scalemass")
+                        HStack(spacing: 10) {
+                            Text("Grams").font(.sans(14, .semibold)).foregroundStyle(Palette.inkSecondary)
+                            Spacer()
+                            stepperButton("minus") { grams = max(1, grams - 5) }
+                            TextField("0", value: $grams, format: .number)
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.center)
+                                .font(.sans(17, .bold)).foregroundStyle(Palette.ink)
+                                .frame(width: 70)
+                            stepperButton("plus") { grams += 5 }
+                            Text("g").font(.sans(12, .semibold)).foregroundStyle(Palette.inkSecondary)
+                        }
+                    }
+                    .cardStyle(padding: 16)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        SectionLabel(title: "Meal", systemImage: "calendar")
+                        Picker("Meal", selection: $meal) {
+                            ForEach(Meal.allCases) { m in Text(m.label).tag(m) }
+                        }
+                        .pickerStyle(.segmented)
+                    }
+
+                    EmberButton(title: "Save", systemImage: "checkmark") { save() }
+
+                    Button(role: .destructive) { delete() } label: {
+                        Text("Delete Entry")
+                            .font(.sans(14, .semibold)).foregroundStyle(Palette.down)
+                            .frame(maxWidth: .infinity).padding(.vertical, 8)
+                    }
+                }
+                .padding(20)
+            }
+            .scrollIndicators(.hidden)
+            .background(AppBackground())
+            .navigationTitle("Edit Entry")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }.foregroundStyle(Palette.inkSecondary)
+                }
+            }
+        }
+    }
+
+    private func stepperButton(_ icon: String, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .bold)).foregroundStyle(Palette.ember)
+                .frame(width: 36, height: 36)
+                .background(Palette.surfaceRaised, in: .circle)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func save() {
+        guard grams > 0 else { return }
+        entry.restate(grams: grams, meal: meal)
+        try? context.save()
+        dismiss()
+    }
+
+    private func delete() {
+        context.delete(entry)
+        try? context.save()
+        dismiss()
     }
 }

@@ -118,6 +118,25 @@ final class DiaryEntry {
     var servingText: String {
         portionLabel.isEmpty ? "\(grams.asGrams) g" : portionLabel
     }
+
+    /// Re-price this entry to a new gram amount + meal, refreshing the snapshot
+    /// from the source food (or scaling the existing snapshot if the food was
+    /// since deleted). Used by the edit sheet.
+    func restate(grams newGrams: Double, meal newMeal: Meal) {
+        let scaled: NutrientVector
+        if let food {
+            scaled = food.nutrients(forGrams: newGrams)
+        } else if grams > 0 {
+            scaled = nutrients.scaled(by: newGrams / grams)
+        } else {
+            scaled = NutrientVector()
+        }
+        grams = newGrams
+        meal = newMeal
+        kcal = scaled.energy
+        nutrientData = scaled.encoded()
+        portionLabel = "\(Int(newGrams.rounded())) g"
+    }
 }
 
 // MARK: - Daily aggregation
