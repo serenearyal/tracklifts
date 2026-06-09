@@ -8,6 +8,10 @@ import SwiftUI
 struct SettingsView: View {
     @AppStorage("weightUnit") private var unit: WeightUnit = .kg
     @AppStorage(BodyMetrics.key) private var bodyWeight: Double = 0
+    @AppStorage(NutritionGoals.energyKey) private var goalEnergy = NutritionGoals.defaultEnergy
+    @AppStorage(NutritionGoals.proteinKey) private var goalProtein = NutritionGoals.defaultProtein
+    @AppStorage(NutritionGoals.carbsKey) private var goalCarbs = NutritionGoals.defaultCarbs
+    @AppStorage(NutritionGoals.fatKey) private var goalFat = NutritionGoals.defaultFat
 
     var body: some View {
         NavigationStack {
@@ -66,6 +70,18 @@ struct SettingsView: View {
                     .buttonStyle(.plain)
 
                     VStack(alignment: .leading, spacing: 14) {
+                        SectionLabel(title: "Nutrition Goals", systemImage: "target")
+                        goalRow("Energy", value: $goalEnergy, unit: "kcal")
+                        goalRow("Protein", value: $goalProtein, unit: "g")
+                        goalRow("Carbs", value: $goalCarbs, unit: "g")
+                        goalRow("Fat", value: $goalFat, unit: "g")
+                        Text("Daily targets for the food diary. Set what works for you; personalized targets arrive in a later update.")
+                            .font(.sans(12))
+                            .foregroundStyle(Palette.inkSecondary)
+                    }
+                    .cardStyle(padding: 18)
+
+                    VStack(alignment: .leading, spacing: 14) {
                         SectionLabel(title: "About", systemImage: "info.circle.fill")
                         row("Version", "1.0")
                     }
@@ -106,6 +122,22 @@ struct SettingsView: View {
             Text(label).font(.sans(15)).foregroundStyle(Palette.ink)
             Spacer()
             Text(value).font(.sans(15, .semibold)).foregroundStyle(Palette.inkSecondary)
+        }
+    }
+
+    private func goalRow(_ label: String, value: Binding<Double>, unit: String) -> some View {
+        HStack {
+            Text(label).font(.sans(15)).foregroundStyle(Palette.ink)
+            Spacer()
+            TextField("0", value: value, format: .number)
+                .keyboardType(.decimalPad)
+                .multilineTextAlignment(.trailing)
+                .font(.sans(16, .bold)).foregroundStyle(Palette.ink)
+                .frame(width: 72)
+                .padding(.vertical, 6).padding(.horizontal, 10)
+                .background(Palette.surfaceRaised, in: .rect(cornerRadius: 10))
+            Text(unit).font(.sans(12, .semibold)).foregroundStyle(Palette.inkSecondary)
+                .frame(width: 34, alignment: .leading)
         }
     }
 }

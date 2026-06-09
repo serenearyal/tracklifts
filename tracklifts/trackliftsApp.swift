@@ -21,6 +21,9 @@ struct trackliftsApp: App {
             LoggedExercise.self,
             LoggedSet.self,
             BodyWeightEntry.self,
+            FoodItem.self,
+            FoodPortion.self,
+            DiaryEntry.self,
         ])
         do {
             return try ModelContainer(for: schema)

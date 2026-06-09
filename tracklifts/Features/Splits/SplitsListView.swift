@@ -112,12 +112,15 @@ struct SplitsListView: View {
     }
 
     private func createSplit() {
+        // Insert first, then wire the to-one inverse — assigning the to-many
+        // (`split.days = …`) on a freshly built model crashes SwiftData on iOS 17.
         let split = Split(name: "New Split", order: splits.count)
-        let push = SplitDay(name: "Push", order: 0); push.split = split
-        let pull = SplitDay(name: "Pull", order: 1); pull.split = split
-        let legs = SplitDay(name: "Legs", order: 2); legs.split = split
-        split.days = [push, pull, legs]
         context.insert(split)
+        for (index, name) in ["Push", "Pull", "Legs"].enumerated() {
+            let day = SplitDay(name: name, order: index)
+            context.insert(day)
+            day.split = split
+        }
         newlyCreated = split
     }
 

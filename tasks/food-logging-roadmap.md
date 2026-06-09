@@ -8,8 +8,10 @@ photo / voice / barcode as convenience layers on top.
 and a **Done when** bar. Don't start a phase until the one above it meets its "Done when."
 Check items off as you go; the next unchecked phase is always what to do next.
 
-**Status:** ✅ **Phase 0 complete** (body-weight log shipped; build green). **Next: Phase 1** — the
-search engine + diary. Resolve **D1** (food data source) before starting it.
+**Status:** ✅ **Phase 0 + Phase 1 engine shipped** (body-weight log; food search → log → diary →
+goals; build green, 258-food catalog). **Next: Phase 2** — micronutrient panel, auto targets/DRI,
+completeness score, HealthKit. A few Phase 1 polish items remain (favorite toggle, edit-entry,
+recents, true FTS, full USDA import).
 
 ---
 
@@ -47,8 +49,9 @@ search engine + diary. Resolve **D1** (food data source) before starting it.
 
 ## Open decisions (resolve before the phase that needs them)
 
-- **D1 — Data source (needed for Phase 1):** free bundled USDA core *(recommended start)* vs.
-  paid provider (better branded/restaurant, costs money + network). → _TBD_
+- **D1 — Data source:** ✅ RESOLVED — bundled a curated **258-food Swift catalog** (whole + common
+  foods, per-100 g macros + portions) for the offline engine. Full USDA→SQLite import + Open Food
+  Facts online expansion = deferred follow-up.
 - **D2 — Photo AI (needed for Phase 4):** strictly offline (skip/limit photo, or paid on-device
   SDK like Passio) vs. cloud Claude-vision opt-in (best accuracy). Voice stays on-device either
   way. → _TBD_
@@ -102,25 +105,30 @@ latest weight. _Unlocks:_ the body-composition half of the wedge (Phase 5).
 
 ---
 
-## Phase 1 — The engine: search + diary  ⬜  ← the core MVP
+## Phase 1 — The engine: search + diary  ✅  (core MVP — Done-when met)
 
-**Goal:** a usable food logger — search a real DB, add to a daily diary, see energy + macros.
-(Resolve **D1** first.)
+**Goal:** a usable food logger — search a real catalog, add to a daily diary, see energy + macros.
 
 **Build**
-- [ ] One-time USDA→SQLite curation script (a few k common whole foods, full panel + portions).
-      Output committed as a bundled resource. *(Spike this before finalizing the schema.)*
-- [ ] `FoodItem` / `FoodPortion` / `DiaryEntry` / `Meal` models + `NutrientVector` value type.
-- [ ] Bundled-DB import on first launch (SeedManager pattern + versioned flag).
-- [ ] **FTS search** over the bundled DB (ranked; recents + favorites first) — fast + great.
-- [ ] Add-food flow: result → pick portion → quantity → meal → commit `DiaryEntry` (snapshot).
-- [ ] **Food/Diary tab** (FORGE): date header, per-meal sections (Breakfast/Lunch/Dinner/Snacks),
-      running energy ring + macro rings, daily totals.
-- [ ] Recents, favorites, quick-add, copy previous day; edit/delete entries.
-- [ ] Manual energy + macro targets (in Settings); show % of target.
+- [x] Curated **258-food catalog** (`FoodLibrary+Core/+Produce.swift`, 119 + 139, built by two
+      parallel agents) with per-100 g macros + portions. *(Full USDA→SQLite import deferred — D1.)*
+- [x] `FoodItem` / `FoodPortion` / `DiaryEntry` / `Meal` models + `NutrientVector` (sparse, Codable;
+      diary entries snapshot their nutrients).
+- [x] Bundled import on first launch (`FoodSeedManager`, count==0 guard).
+- [x] Search (`FoodSearchView`) — name/brand filter, favorites first. *(In-memory; SQLite FTS
+      deferred until the catalog reaches USDA scale.)*
+- [x] Add-food flow (`LogFoodView`): portion → quantity → meal → live macro preview → commit.
+- [x] **Food tab** (`FoodDiaryView`): day navigator, per-meal sections (B/L/D/Snacks), energy +
+      P/C/F summary bars vs goals, entry rows (delete), copy-previous-day.
+- [x] Manual energy + macro targets (Settings) + progress vs target.
+- [ ] _Follow-ups (not blockers; some overlap Phase 3):_ favorite toggle in search, tap-to-edit an
+      entry, recents/quick-add, custom foods, true FTS, USDA/branded expansion.
 
-**Done when:** a user can log a full day by searching foods and see accurate calories + macros
-against a target. _Unlocks:_ everything else (all modes feed this engine).
+**Shipped:** `Models/Nutrition.swift`, `Models/Food.swift`, `Data/FoodLibrary*.swift`,
+`Data/FoodSeedManager.swift`, `Features/Food/FoodDiaryView.swift`, `Features/Food/FoodSearchView.swift`;
+schema + RootView (new **Food** tab) + Settings goals. Build green (iPhone 17 Pro / iOS 26.2).
+
+**Done when:** ✅ a user can log a full day by searching foods and see calories + macros vs a target.
 
 ---
 
@@ -204,3 +212,6 @@ pure food app can.
 - _2026-06-08_ — Roadmap created from the architecture discussion. No phases started yet.
 - _2026-06-08_ — **Phase 0 shipped:** body-weight log (`BodyWeightEntry`, `BodyWeightView`,
   Progress summary card, Settings entry point, legacy-value migration). Build green.
+- _2026-06-08_ — **Phase 1 engine shipped:** 258-food catalog (two parallel agents), nutrition
+  models, search→log flow, Food diary tab + goals, new Food tab. Build green. Follow-ups: FTS,
+  recents, edit-entry, favorite toggle, USDA/branded import.

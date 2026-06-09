@@ -15,18 +15,16 @@ struct RootView: View {
 
     var body: some View {
         TabView {
-            Tab("Log", systemImage: "square.and.pencil") {
-                WorkoutHistoryView()
-            }
-            Tab("Library", systemImage: "square.stack.3d.up.fill") {
-                LibraryView()
-            }
-            Tab("Progress", systemImage: "chart.xyaxis.line") {
-                ProgressOverviewView()
-            }
-            Tab("Settings", systemImage: "gearshape.fill") {
-                SettingsView()
-            }
+            WorkoutHistoryView()
+                .tabItem { Label("Log", systemImage: "square.and.pencil") }
+            FoodDiaryView()
+                .tabItem { Label("Food", systemImage: "fork.knife") }
+            LibraryView()
+                .tabItem { Label("Library", systemImage: "square.stack.3d.up.fill") }
+            ProgressOverviewView()
+                .tabItem { Label("Progress", systemImage: "chart.xyaxis.line") }
+            SettingsView()
+                .tabItem { Label("Settings", systemImage: "gearshape.fill") }
         }
         .task {
             // UI-test hook: start from a clean store for deterministic runs.
@@ -35,6 +33,7 @@ struct RootView: View {
             }
             SeedManager.seedIfNeeded(context)
             SeedManager.seedBodyWeightIfNeeded(context)
+            FoodSeedManager.seedIfNeeded(context)
             if ProcessInfo.processInfo.arguments.contains("--seed-sample") {
                 SampleData.seedIfNeeded(context)
             }
@@ -48,5 +47,6 @@ struct RootView: View {
             Exercise.self, Split.self, SplitDay.self, SplitItem.self,
             WorkoutSession.self, LoggedExercise.self, LoggedSet.self,
             BodyWeightEntry.self,
+            FoodItem.self, FoodPortion.self, DiaryEntry.self,
         ], inMemory: true)
 }
