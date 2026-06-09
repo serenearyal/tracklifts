@@ -18,11 +18,8 @@ struct RootView: View {
             Tab("Log", systemImage: "square.and.pencil") {
                 WorkoutHistoryView()
             }
-            Tab("Exercises", systemImage: "dumbbell.fill") {
-                ExerciseLibraryView()
-            }
-            Tab("Splits", systemImage: "rectangle.3.group") {
-                SplitsListView()
+            Tab("Library", systemImage: "square.stack.3d.up.fill") {
+                LibraryView()
             }
             Tab("Progress", systemImage: "chart.xyaxis.line") {
                 ProgressOverviewView()
@@ -37,6 +34,7 @@ struct RootView: View {
                 SeedManager.resetAll(context)
             }
             SeedManager.seedIfNeeded(context)
+            SeedManager.seedBodyWeightIfNeeded(context)
             if ProcessInfo.processInfo.arguments.contains("--seed-sample") {
                 SampleData.seedIfNeeded(context)
             }
@@ -49,5 +47,6 @@ struct RootView: View {
         .modelContainer(for: [
             Exercise.self, Split.self, SplitDay.self, SplitItem.self,
             WorkoutSession.self, LoggedExercise.self, LoggedSet.self,
+            BodyWeightEntry.self,
         ], inMemory: true)
 }

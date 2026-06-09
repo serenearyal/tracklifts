@@ -116,13 +116,16 @@ struct SessionRow: View {
                 .padding(.vertical, 4)
 
             VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(session.date.formatted(.dateTime.weekday(.wide)))
-                        .font(.display(24))
-                        .foregroundStyle(Palette.ink)
-                    Text(session.date.formatted(.dateTime.month(.abbreviated).day()))
-                        .font(.sans(13, .semibold))
-                        .foregroundStyle(Palette.inkSecondary)
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(session.date.formatted(.dateTime.weekday(.wide)).uppercased())
+                            .font(.sans(11, .bold))
+                            .tracking(1.8)
+                            .foregroundStyle(Palette.ember)
+                        Text(session.date.formatted(.dateTime.month(.abbreviated).day()))
+                            .font(.display(28))
+                            .foregroundStyle(Palette.ink)
+                    }
                     Spacer()
                     if !session.title.isEmpty {
                         TagChip(text: session.title)

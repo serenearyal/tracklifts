@@ -25,6 +25,15 @@ enum BodyMetrics {
     static var isSet: Bool { current > 0 }
 }
 
+extension BodyMetrics {
+    /// Re-cache `current` as the most recent entry's weight (0 if none), so the
+    /// effective-load math — which runs in non-View model code that can't query —
+    /// always reflects the latest weigh-in from the log.
+    static func refreshCurrent(from entries: [BodyWeightEntry]) {
+        current = entries.max { ($0.date, $0.createdAt) < ($1.date, $1.createdAt) }?.weight ?? 0
+    }
+}
+
 // MARK: - Effective load
 
 extension LoggedSet {

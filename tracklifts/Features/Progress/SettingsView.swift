@@ -8,7 +8,6 @@ import SwiftUI
 struct SettingsView: View {
     @AppStorage("weightUnit") private var unit: WeightUnit = .kg
     @AppStorage(BodyMetrics.key) private var bodyWeight: Double = 0
-    @FocusState private var bodyWeightFocused: Bool
 
     var body: some View {
         NavigationStack {
@@ -30,35 +29,41 @@ struct SettingsView: View {
                     }
                     .cardStyle(padding: 18)
 
-                    VStack(alignment: .leading, spacing: 14) {
-                        SectionLabel(title: "Body Weight", systemImage: "figure")
-                        HStack(spacing: 10) {
-                            TextField("0", value: $bodyWeight, format: .number)
-                                .keyboardType(.decimalPad)
-                                .focused($bodyWeightFocused)
-                                .multilineTextAlignment(.center)
-                                .font(.sans(20, .bold))
-                                .foregroundStyle(Palette.ink)
-                                .frame(width: 96)
-                                .padding(.vertical, 10)
-                                .background(Palette.surfaceRaised, in: .rect(cornerRadius: 12))
-                            Text(unit.label.uppercased())
-                                .font(.sans(13, .bold)).tracking(1)
-                                .foregroundStyle(Palette.inkSecondary)
-                            Spacer()
-                            if bodyWeightFocused {
-                                Button("Done") { bodyWeightFocused = false }
-                                    .font(.sans(15, .semibold))
+                    NavigationLink {
+                        BodyWeightView()
+                    } label: {
+                        VStack(alignment: .leading, spacing: 12) {
+                            SectionLabel(title: "Body Weight", systemImage: "figure")
+                            HStack(alignment: .firstTextBaseline) {
+                                if bodyWeight > 0 {
+                                    Text(bodyWeight.trimmedWeight)
+                                        .font(.display(30))
+                                        .foregroundStyle(Palette.ink)
+                                    Text(unit.label.uppercased())
+                                        .font(.sans(12, .bold)).tracking(1)
+                                        .foregroundStyle(Palette.inkSecondary)
+                                } else {
+                                    Text("Not set yet")
+                                        .font(.sans(16, .semibold))
+                                        .foregroundStyle(Palette.inkSecondary)
+                                }
+                                Spacer()
+                                Text("Open log")
+                                    .font(.sans(12, .bold)).tracking(1)
                                     .foregroundStyle(Palette.ember)
-                                    .transition(.opacity.combined(with: .move(edge: .trailing)))
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundStyle(Palette.inkTertiary)
                             }
+                            Text("Logged over time to chart your trend — and to score bodyweight lifts (pull-ups, dips…) as body weight plus any added load.")
+                                .font(.sans(12))
+                                .foregroundStyle(Palette.inkSecondary)
+                                .multilineTextAlignment(.leading)
                         }
-                        .animation(.snappy, value: bodyWeightFocused)
-                        Text("Used to score bodyweight lifts (pull-ups, dips…) as your body weight plus any added weight. Leave at 0 to track those by reps instead.")
-                            .font(.sans(12))
-                            .foregroundStyle(Palette.inkSecondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .cardStyle(padding: 18)
                     }
-                    .cardStyle(padding: 18)
+                    .buttonStyle(.plain)
 
                     VStack(alignment: .leading, spacing: 14) {
                         SectionLabel(title: "About", systemImage: "info.circle.fill")

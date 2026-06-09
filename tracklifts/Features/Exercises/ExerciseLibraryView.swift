@@ -2,6 +2,9 @@
 //  ExerciseLibraryView.swift
 //  tracklifts
 //
+//  The "Exercises" half of the Library tab: the searchable movement catalog,
+//  grouped by muscle. Embedded inside `LibraryView`'s NavigationStack.
+//
 
 import SwiftUI
 import SwiftData
@@ -31,90 +34,88 @@ struct ExerciseLibraryView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(alignment: .top) {
-                        ScreenHeader(eyebrow: "\(exercises.count) movements", title: "Exercises")
-                        Button { showingAdd = true } label: {
-                            Image(systemName: "plus")
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundStyle(.black)
-                                .frame(width: 42, height: 42)
-                                .background(Grad.ember, in: .circle)
-                                .shadow(color: Palette.ember.opacity(0.5), radius: 10, y: 4)
-                        }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .center) {
+                    Eyebrow(text: "\(exercises.count) movements")
+                    Spacer()
+                    Button { showingAdd = true } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(.black)
+                            .frame(width: 42, height: 42)
+                            .background(Grad.ember, in: .circle)
+                            .shadow(color: Palette.ember.opacity(0.5), radius: 10, y: 4)
+                    }
+                }
+                .padding(.top, 2)
+
+                filterBar
+
+                if sections.isEmpty {
+                    Text(exercises.isEmpty ? "Loading library…" : "No matches")
+                        .font(.sans(15)).foregroundStyle(Palette.inkSecondary)
+                        .frame(maxWidth: .infinity).padding(.top, 30)
+                }
+
+                ForEach(sections, id: \.group) { section in
+                    HStack(spacing: 8) {
+                        Circle().fill(section.group.color).frame(width: 7, height: 7)
+                        Text(section.group.displayName.uppercased())
+                            .font(.sans(12, .bold)).tracking(1.5)
+                            .foregroundStyle(Palette.inkSecondary)
                     }
                     .padding(.top, 8)
 
-                    filterBar
-
-                    if sections.isEmpty {
-                        Text(exercises.isEmpty ? "Loading library…" : "No matches")
-                            .font(.sans(15)).foregroundStyle(Palette.inkSecondary)
-                            .frame(maxWidth: .infinity).padding(.top, 30)
-                    }
-
-                    ForEach(sections, id: \.group) { section in
-                        HStack(spacing: 8) {
-                            Circle().fill(section.group.color).frame(width: 7, height: 7)
-                            Text(section.group.displayName.uppercased())
-                                .font(.sans(12, .bold)).tracking(1.5)
-                                .foregroundStyle(Palette.inkSecondary)
-                        }
-                        .padding(.top, 8)
-
-                        ForEach(section.items) { exercise in
-                            ZStack(alignment: .trailing) {
-                                NavigationLink {
-                                    ExerciseDetailView(exercise: exercise)
-                                } label: {
-                                    ExerciseRow(exercise: exercise)
-                                }
-                                .buttonStyle(.plain)
-                                .contextMenu {
-                                    Button {
-                                        exercise.isFavorite.toggle()
-                                    } label: {
-                                        Label(exercise.isFavorite ? "Unfavorite" : "Favorite",
-                                              systemImage: exercise.isFavorite ? "star.slash" : "star.fill")
-                                    }
-                                    Button {
-                                        exercise.isBodyweight.toggle()
-                                    } label: {
-                                        Label(exercise.isBodyweight ? "Mark as Weighted" : "Mark as Bodyweight",
-                                              systemImage: "figure.strengthtraining.functional")
-                                    }
-                                    if exercise.isCustom {
-                                        Divider()
-                                        Button(role: .destructive) {
-                                            context.delete(exercise)
-                                        } label: { Label("Delete", systemImage: "trash") }
-                                    }
-                                }
-
-                                Button { exercise.isFavorite.toggle() } label: {
-                                    Image(systemName: exercise.isFavorite ? "star.fill" : "star")
-                                        .font(.system(size: 16, weight: .semibold))
-                                        .foregroundStyle(exercise.isFavorite ? Palette.gold : Palette.inkTertiary)
-                                        .frame(width: 44, height: 44)
-                                        .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                                .padding(.trailing, 8)
+                    ForEach(section.items) { exercise in
+                        ZStack(alignment: .trailing) {
+                            NavigationLink {
+                                ExerciseDetailView(exercise: exercise)
+                            } label: {
+                                ExerciseRow(exercise: exercise)
                             }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                Button {
+                                    exercise.isFavorite.toggle()
+                                } label: {
+                                    Label(exercise.isFavorite ? "Unfavorite" : "Favorite",
+                                          systemImage: exercise.isFavorite ? "star.slash" : "star.fill")
+                                }
+                                Button {
+                                    exercise.isBodyweight.toggle()
+                                } label: {
+                                    Label(exercise.isBodyweight ? "Mark as Weighted" : "Mark as Bodyweight",
+                                          systemImage: "figure.strengthtraining.functional")
+                                }
+                                if exercise.isCustom {
+                                    Divider()
+                                    Button(role: .destructive) {
+                                        context.delete(exercise)
+                                    } label: { Label("Delete", systemImage: "trash") }
+                                }
+                            }
+
+                            Button { exercise.isFavorite.toggle() } label: {
+                                Image(systemName: exercise.isFavorite ? "star.fill" : "star")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundStyle(exercise.isFavorite ? Palette.gold : Palette.inkTertiary)
+                                    .frame(width: 44, height: 44)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.trailing, 8)
                         }
                     }
                 }
-                .padding(20)
-                .padding(.bottom, 30)
             }
-            .scrollIndicators(.hidden)
-            .background(AppBackground())
-            .navigationBarHidden(true)
-            .searchable(text: $searchText, prompt: "Search exercises")
-            .sheet(isPresented: $showingAdd) { EditExerciseView() }
+            .padding(.horizontal, 20)
+            .padding(.top, 4)
+            .padding(.bottom, 30)
         }
+        .scrollIndicators(.hidden)
+        .searchable(text: $searchText, prompt: "Search exercises")
+        .sheet(isPresented: $showingAdd) { EditExerciseView() }
     }
 
     private var filterBar: some View {

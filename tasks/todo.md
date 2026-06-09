@@ -1,87 +1,30 @@
-# TrackLifts — Build Plan
+# Task: Log redesign · combine tabs · marketing website
 
-## Models (SwiftData)
-- [ ] MuscleGroup enum (display, symbol, color)
-- [ ] Exercise
-- [ ] Split / SplitDay / SplitItem
-- [ ] WorkoutSession / LoggedExercise / LoggedSet
-- [ ] Metric helpers (1RM, volume, best set)
+## App changes (main agent) — DONE
+- [x] A1 — Log page: date ("JUN 8") is now the hero; weekday ("MONDAY") is the small ember eyebrow above it (`SessionRow`).
+- [x] A2 — Combined **Exercises + Splits → "Library"** tab with FORGE ember segmented switcher.
+  - [x] `Features/Library/LibraryView.swift` (LibraryMode + LibraryView + LibraryModeSwitcher).
+  - [x] `ExerciseLibraryView` / `SplitsListView` → embeddable content (own NavigationStack/title removed).
+  - [x] `RootView`: Log · Library · Progress · Settings.
+  - [x] `trackliftsUITests` tab taps updated (Library + segment ids).
+- [x] Build: ** BUILD SUCCEEDED ** (iPhone 17 Pro, iOS 26.2).
 
-## Data
-- [ ] Exercise seed library (~65 exercises)
-- [ ] Seeding on first launch
-
-## Shared
-- [ ] Theme / colors
-- [ ] Reusable components (cards, stat pills, empty states)
-- [ ] Weight unit (AppStorage)
-
-## Features
-- [ ] App entry + ModelContainer + RootTabView
-- [ ] Log: history list + new/edit session + inline set entry + exercise picker
-- [ ] Exercises: library grouped by muscle, search, favorites, custom add, detail
-- [ ] Splits: list + editor (days + exercises)
-- [ ] Progress: charts (max weight / 1RM / volume), PRs, favorites overview
-
-## Verify
-- [x] xcodebuild succeeds for simulator (BUILD SUCCEEDED, iPhone 17 Pro / iOS 26.2)
-- [x] App launches; empty states render
-- [x] Seeding verified in store: 69 exercises across 7 groups
-- [ ] UI smoke test drives all tabs + logging flow
-
-## Enhancements (round 2)
-- [x] Session-over-session delta on logging screen ("+3% vs last")
-- [x] Time-range picker on charts (All / 90d / 30d) + windowed % change
-- [x] Bold PR badge "🏆 New PR!" when a logged session beats the record
-- [x] Fixed real bug: same-day sessions compared equal (DatePicker normalizes
-      date to midnight) → added WorkoutSession.createdAt tiebreak in isBefore()
-- [x] Added gated SampleData seeder (--seed-sample) + UI test, all passing
+## Website (`website/`)
+- [x] Brand-locked scaffold: `styles.css` (FORGE tokens + components + phone-mockup atoms), `app.js` (reveal/nav/count-up/parallax), `assets/mark.svg` (ember flame).
+- [x] Agent W-A: `index.html` flagship landing (wow hero + features + showcase + CTA).
+- [x] Agent W-B: `features.html` + `download.html`.
+- [x] Integrate + cohesion/QA pass (fixed dangling hero copy, dup class, empty App Store logos; added branded `assets/og.png`).
+- [x] Link integrity: all internal anchors/links resolve; every page wired to styles.css/app.js/og.png/nav/footer.
 
 ## Review
-- All models, seed, shared components, and 4 feature areas built.
-- Synchronized file group auto-included every new .swift file (no pbxproj edits).
-- iOS 26.2 target → SwiftData + Swift Charts + new Tab API used directly.
-</content>
+**App** — both changes shipped and compile (BUILD SUCCEEDED, iPhone 17 Pro / iOS 26.2):
+- Log rows now lead with the **date** (`.display(28)` "JUN 8") and a small ember weekday eyebrow above — the date is the hero.
+- Exercises + Splits merged into a single **Library** tab (`LibraryView`) with a custom FORGE ember segmented switcher (matched-geometry slide). Each half kept all functionality (search, favorites, custom/bodyweight, splits build/reorder/bulk-favorite). RootView is now Log · Library · Progress · Settings. UITests updated to tap Library + `librarySegment.*`.
 
-## Redesign — "FORGE" dark theme (round 3)
-- [x] Design system: Bebas Neue + Archivo (bundled, runtime-registered), ember palette, grain bg
-- [x] Restyled all screens: Log, Exercises, Splits, Progress, detail, editor, pickers, settings
-- [x] Custom components: ForgeCard, ScreenHeader, StatTile, EmberButton, TrendChip, glowing PR badge
-- [x] Staggered appear animations, gradient charts, ranked records
-- [x] Fixed nav bug (ScrollView+LazyVStack tap) and unbounded-width bug (ZStack-wrapped TabView)
-- [x] Full UI test suite green; all screens verified via screenshots
+**Website** (`website/`) — spectacular 3-page marketing site in the app's FORGE language:
+- `styles.css` (FORGE tokens + components + in-browser phone-mockup atoms), `app.js` (scroll reveal, sticky nav, count-ups, parallax, mobile menu), `assets/mark.svg` (ember flame), `assets/og.png` (branded social card, rendered via rsvg-convert + bundled Bebas/Archivo).
+- `index.html`: cinematic hero (ember sparks + glow + floating Log-screen phone with the new date-hero rows), count-up stat band, 4 alternating feature sections (incl. the new combined Library segmented tab + Progress charts + pulsing New PR!), feature grid, how-it-works, 3-device showcase, CTA.
+- `features.html`: deep numbered tour + spec band + FAQ accordions. `download.html`: conversion hero + requirement tiles + steps.
+- Built by 2 parallel agents against the brand-locked scaffold; QA'd for cohesion + link integrity.
 
-## Intuitive progress + gestures (round 4)
-- [x] Progress tab scope selector: Tracked (all logged, zero setup) / Favorites / per-Split
-- [x] Split scope shows day-grouped trend cards (no favoriting needed)
-- [x] Bulk favorite: "Favorite all lifts in split" + per-day ⋯ menu in split editor
-- [x] Bulk favorite from Splits list (context menu) too
-- [x] Gestures: tap split exercise → progress; leading-swipe to favorite; Repeat Workout on a session; richer exercise context menu
-- [x] SampleData seeds a PPL split; UI test covers scope + bulk-favorite; suite green
-
-## Publish-readiness (round 5) — logo, reordering, bodyweight
-
-### Logo / App Icon  (agent, parallel)
-- [ ] CoreGraphics generator → 1024² PNGs: primary, dark, tinted, + transparent mark
-- [ ] Wire AppIcon.appiconset/Contents.json; add Logo imageset
-- [ ] In-app brand lockup shown in Settings → About
-- [ ] Verify: Read PNG + simulator home-screen screenshot shows the icon
-
-### Reorder while logging (+ everywhere it makes sense)
-- [ ] Reusable `ReorderSheet` + `ReorderRequest` (always-on edit mode, FORGE styled)
-- [ ] LogWorkoutView: reorder exercises (toolbar)
-- [ ] SplitEditorView: reorder days + reorder exercises within a day (menus)
-
-### Bodyweight exercises (pull-ups, sit-ups, …)
-- [ ] `Exercise.isBodyweight` (+ seed obvious calisthenics) + idempotent backfill
-- [ ] `BodyMetrics.current` body-weight setting + Settings field
-- [ ] `LoggedSet.effectiveWeight` = bodyweight + added (graceful fallback to reps)
-- [ ] Logging UI: reps-hero row, optional "+ added", BW badge
-- [ ] `Exercise.primaryMetric` (Best Reps when pure bodyweight w/o body weight)
-- [ ] Progress (charts, trend cards, PRs, detail hero) adapt; set summaries "12 reps"
-- [ ] EditExerciseView bodyweight toggle for custom exercises
-
-### Verify
-- [ ] xcodebuild (iPhone 17 Pro, iOS 26.2 — id EC286661-…) BUILD SUCCEEDED
-- [ ] UI test extended: reorder + bodyweight logging + screenshots; export & eyeball
-- [ ] README + memory updated
+To preview: open `website/index.html` (needs internet for Google Fonts).

@@ -27,6 +27,7 @@ struct ProgressOverviewView: View {
     private var favorites: [Exercise]
     @Query(sort: [SortDescriptor(\Split.order), SortDescriptor(\Split.createdAt)])
     private var splits: [Split]
+    @Query(sort: \BodyWeightEntry.date) private var weights: [BodyWeightEntry]
 
     @State private var scope: ProgressScope = .tracked
 
@@ -47,8 +48,9 @@ struct ProgressOverviewView: View {
                         header.appearLift(0)
                         heroCard.appearLift(1)
                         statsRow.appearLift(2)
-                        recordsSection.appearLift(3)
-                        trackSection.appearLift(4)
+                        bodyWeightCard.appearLift(3)
+                        recordsSection.appearLift(4)
+                        trackSection.appearLift(5)
                     }
                     .padding(20)
                     .padding(.bottom, 36)
@@ -123,6 +125,15 @@ struct ProgressOverviewView: View {
     }
 
     private var totalSets: Int { sessions.reduce(0) { $0 + $1.totalSets } }
+
+    // MARK: - Body weight
+
+    private var bodyWeightCard: some View {
+        NavigationLink { BodyWeightView() } label: {
+            BodyWeightSummaryCard(entries: weights, unit: unit)
+        }
+        .buttonStyle(.plain)
+    }
 
     // MARK: - Records
 

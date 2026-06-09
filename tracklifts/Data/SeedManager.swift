@@ -34,6 +34,17 @@ enum SeedManager {
         try? context.save()
     }
 
+    /// Bootstraps the weight log from the legacy single body-weight setting: if
+    /// the user had set a body weight (used for calisthenics load) but has no
+    /// logged weigh-ins yet, seed one so their value becomes the first point.
+    @MainActor
+    static func seedBodyWeightIfNeeded(_ context: ModelContext) {
+        let count = (try? context.fetchCount(FetchDescriptor<BodyWeightEntry>())) ?? 0
+        guard count == 0, BodyMetrics.current > 0 else { return }
+        context.insert(BodyWeightEntry(date: .now, weight: BodyMetrics.current))
+        try? context.save()
+    }
+
     /// Wipes every model (children first) and the one-time flags. UI-test only
     /// hook so each run starts from a deterministic, empty store.
     @MainActor
@@ -45,6 +56,8 @@ enum SeedManager {
         try? context.delete(model: SplitDay.self)
         try? context.delete(model: Split.self)
         try? context.delete(model: Exercise.self)
+        try? context.delete(model: BodyWeightEntry.self)
+        BodyMetrics.current = 0
         UserDefaults.standard.removeObject(forKey: backfillFlag)
         try? context.save()
     }

@@ -2,7 +2,8 @@
 //  SplitsListView.swift
 //  tracklifts
 //
-//  The "Splits" tab: build and manage training routines.
+//  The "Splits" half of the Library tab: build and manage training routines.
+//  Embedded inside `LibraryView`'s NavigationStack.
 //
 
 import SwiftUI
@@ -17,80 +18,77 @@ struct SplitsListView: View {
     @State private var reorderRequest: ReorderRequest?
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(alignment: .top, spacing: 10) {
-                        ScreenHeader(eyebrow: "Your routines", title: "Splits")
-                        Spacer()
-                        if splits.count > 1 {
-                            Button(action: presentReorder) {
-                                Image(systemName: "arrow.up.arrow.down")
-                                    .font(.system(size: 15, weight: .bold))
-                                    .foregroundStyle(Palette.ember)
-                                    .frame(width: 42, height: 42)
-                                    .background(Palette.surface, in: .circle)
-                                    .overlay(Circle().strokeBorder(Palette.hairline, lineWidth: 1))
-                            }
-                            .accessibilityIdentifier("reorderSplits")
-                            .accessibilityLabel("Reorder Splits")
-                        }
-                        Button(action: createSplit) {
-                            Image(systemName: "plus")
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundStyle(.black)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .center, spacing: 10) {
+                    Eyebrow(text: "Your routines")
+                    Spacer()
+                    if splits.count > 1 {
+                        Button(action: presentReorder) {
+                            Image(systemName: "arrow.up.arrow.down")
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundStyle(Palette.ember)
                                 .frame(width: 42, height: 42)
-                                .background(Grad.ember, in: .circle)
-                                .shadow(color: Palette.ember.opacity(0.5), radius: 10, y: 4)
+                                .background(Palette.surface, in: .circle)
+                                .overlay(Circle().strokeBorder(Palette.hairline, lineWidth: 1))
                         }
-                        .accessibilityIdentifier("addSplit")
-                        .accessibilityLabel("Add Split")
+                        .accessibilityIdentifier("reorderSplits")
+                        .accessibilityLabel("Reorder Splits")
                     }
-                    .padding(.top, 8)
-                    .appearLift(0)
+                    Button(action: createSplit) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(.black)
+                            .frame(width: 42, height: 42)
+                            .background(Grad.ember, in: .circle)
+                            .shadow(color: Palette.ember.opacity(0.5), radius: 10, y: 4)
+                    }
+                    .accessibilityIdentifier("addSplit")
+                    .accessibilityLabel("Add Split")
+                }
+                .padding(.top, 2)
+                .appearLift(0)
 
-                    if splits.isEmpty {
-                        EmptyStateView(symbol: "rectangle.3.group",
-                                       title: "No Splits Yet",
-                                       message: "Create a routine like Push / Pull / Legs and fill each day with your lifts.")
-                            .padding(.top, 20)
-                            .appearLift(1)
-                    } else {
-                        ForEach(Array(splits.enumerated()), id: \.element.persistentModelID) { index, split in
-                            NavigationLink {
-                                SplitEditorView(split: split)
-                            } label: {
-                                SplitRow(split: split)
-                            }
-                            .buttonStyle(.plain)
-                            .contextMenu {
-                                Button {
-                                    setFavorite(true, in: split)
-                                } label: { Label("Favorite all lifts", systemImage: "star.fill") }
-                                Button {
-                                    setFavorite(false, in: split)
-                                } label: { Label("Remove from Favorites", systemImage: "star.slash") }
-                                Divider()
-                                Button(role: .destructive) {
-                                    context.delete(split)
-                                } label: { Label("Delete", systemImage: "trash") }
-                            }
-                            .appearLift(min(index + 1, 6))
+                if splits.isEmpty {
+                    EmptyStateView(symbol: "rectangle.3.group",
+                                   title: "No Splits Yet",
+                                   message: "Create a routine like Push / Pull / Legs and fill each day with your lifts.")
+                        .padding(.top, 20)
+                        .appearLift(1)
+                } else {
+                    ForEach(Array(splits.enumerated()), id: \.element.persistentModelID) { index, split in
+                        NavigationLink {
+                            SplitEditorView(split: split)
+                        } label: {
+                            SplitRow(split: split)
                         }
+                        .buttonStyle(.plain)
+                        .contextMenu {
+                            Button {
+                                setFavorite(true, in: split)
+                            } label: { Label("Favorite all lifts", systemImage: "star.fill") }
+                            Button {
+                                setFavorite(false, in: split)
+                            } label: { Label("Remove from Favorites", systemImage: "star.slash") }
+                            Divider()
+                            Button(role: .destructive) {
+                                context.delete(split)
+                            } label: { Label("Delete", systemImage: "trash") }
+                        }
+                        .appearLift(min(index + 1, 6))
                     }
                 }
-                .padding(20)
-                .padding(.bottom, 30)
             }
-            .scrollIndicators(.hidden)
-            .background(AppBackground())
-            .navigationBarHidden(true)
-            .navigationDestination(item: $newlyCreated) { split in
-                SplitEditorView(split: split)
-            }
-            .sheet(item: $reorderRequest) { request in
-                ReorderSheet(request: request)
-            }
+            .padding(20)
+            .padding(.top, 4)
+            .padding(.bottom, 30)
+        }
+        .scrollIndicators(.hidden)
+        .navigationDestination(item: $newlyCreated) { split in
+            SplitEditorView(split: split)
+        }
+        .sheet(item: $reorderRequest) { request in
+            ReorderSheet(request: request)
         }
     }
 

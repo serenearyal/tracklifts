@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Features — TrackLifts · Train. Track. Repeat.</title>
+  <meta name="description" content="A deep tour of TrackLifts: fast strength logging, one library of 69 exercises and splits, Swift Charts progress for max weight, 1RM and volume, plus PRs and momentum — all on your iPhone, fully offline.">
+  <meta name="theme-color" content="#0B0A09">
+  <link rel="icon" href="assets/mark.svg">
+  <link rel="canonical" href="features.html">
+
+  <!-- Open Graph / social -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="TrackLifts">
+  <meta property="og:title" content="Features — TrackLifts">
+  <meta property="og:description" content="Everything you need to outlift yesterday: fast logging, one library of movements + splits, and progress you can actually see.">
+  <meta property="og:image" content="assets/og.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Features — TrackLifts">
+  <meta name="twitter:description" content="Fast logging, one library, and progress you can see. Built for the iron.">
+  <meta name="twitter:image" content="assets/og.png">
+
+  <link rel="stylesheet" href="styles.css">
+
+  <!-- Page-local layout only; uses existing tokens exclusively. -->
+  <style>
+    /* Alternating split: text column beside a phone mockup. */
+    .split { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: clamp(28px, 5vw, 72px); align-items: center; }
+    .split.flip .split-media { order: -1; }
+    @media (max-width: 920px) {
+      .split { grid-template-columns: 1fr; gap: clamp(32px, 8vw, 56px); }
+      .split.flip .split-media { order: 0; }
+      .split-media { justify-self: center; }
+    }
+    .split-media { display: flex; justify-content: center; position: relative; }
+
+    /* Numbered group index that sits above each section heading. */
+    .grp-index {
+      font-family: var(--font-display); font-size: 1.05rem; letter-spacing: 0.08em;
+      color: var(--ember); -webkit-text-fill-color: transparent;
+      background: var(--ember-grad); -webkit-background-clip: text; background-clip: text;
+      display: inline-block; margin-bottom: 0.6rem;
+    }
+
+    /* Tight bullet list with ember tick markers. */
+    .feat-list { list-style: none; margin: 1.6rem 0 0; padding: 0; display: grid; gap: 1.05rem; }
+    .feat-list li { display: grid; grid-template-columns: 26px 1fr; gap: 0.85rem; align-items: start; }
+    .feat-list .tick {
+      width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; margin-top: 1px;
+      background: linear-gradient(140deg, rgba(255,122,51,0.26), rgba(255,122,51,0.08));
+      border: 1px solid rgba(255,122,51,0.30); color: var(--ember);
+    }
+    .feat-list .tick svg { width: 14px; height: 14px; }
+    .feat-list strong { color: var(--ink); font-weight: 700; display: block; line-height: 1.3; }
+    .feat-list span.sub { color: var(--ink-2); font-size: 0.95rem; }
+
+    /* In-app exercise / split rows for Library mockup. */
+    .app-row { display: flex; align-items: center; gap: 9px; }
+    .app-row .app-glyph { flex: 0 0 auto; }
+    .app-row .meta { flex: 1; min-width: 0; }
+    .app-row .ex-name { font-size: 0.72rem; font-weight: 700; color: var(--ink); letter-spacing: 0.01em; }
+    .app-row .ex-grp { font-size: 0.54rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
+    .app-star { color: var(--gold); font-size: 0.85rem; }
+    .app-bw { font-size: 0.5rem; font-weight: 800; letter-spacing: 0.08em; color: var(--ink-2); background: rgba(245,242,234,0.06); border: 1px solid var(--hairline); padding: 2px 5px; border-radius: 6px; }
+
+    /* FAQ accordions. */
+    .faq { display: grid; gap: 0.9rem; max-width: 820px; margin-inline: auto; }
+    .faq details {
+      background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--r-md);
+      padding: 0 clamp(18px, 2.2vw, 26px); box-shadow: var(--shadow-soft);
+      transition: border-color 0.25s var(--ease);
+    }
+    .faq details[open] { border-color: var(--hairline-strong); }
+    .faq summary {
+      list-style: none; cursor: pointer; padding: 1.2rem 0; display: flex; align-items: center; gap: 1rem;
+      font-family: var(--font-sans); font-weight: 700; font-size: 1.02rem; color: var(--ink);
+    }
+    .faq summary::-webkit-details-marker { display: none; }
+    .faq summary .q-mark {
+      margin-left: auto; flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%;
+      border: 1px solid var(--hairline-strong); display: grid; place-items: center;
+      color: var(--ember); font-size: 1.2rem; line-height: 1; transition: transform 0.25s var(--ease);
+    }
+    .faq details[open] summary .q-mark { transform: rotate(45deg); }
+    .faq .faq-body { padding: 0 0 1.3rem; color: var(--ink-2); font-size: 0.98rem; max-width: 64ch; }
+    .faq .faq-body p { margin: 0; }
+
+    /* Clean spec list. */
+    .spec-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--hairline);
+      border: 1px solid var(--hairline); border-radius: var(--r-lg); overflow: hidden; }
+    @media (max-width: 880px) { .spec-list { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 520px) { .spec-list { grid-template-columns: 1fr; } }
+    .spec-list .spec { background: var(--surface); padding: 1.5rem 1.6rem; display: flex; flex-direction: column; gap: 0.35rem; }
+    .spec .spec-k { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); }
+    .spec .spec-v { font-family: var(--font-display); font-size: 1.9rem; line-height: 0.95; color: var(--ink); letter-spacing: 0.02em; }
+    .spec .spec-v small { font-family: var(--font-sans); font-size: 0.78rem; font-weight: 600; color: var(--ink-2); letter-spacing: 0; text-transform: none; }
+
+    /* Hero arrangement. */
+    .feat-hero { position: relative; overflow: hidden; }
+    .feat-hero .hero-grid { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: clamp(24px, 5vw, 64px); align-items: center; }
+    @media (max-width: 920px) { .feat-hero .hero-grid { grid-template-columns: 1fr; } .feat-hero .split-media { justify-self: center; } }
+
+    /* Final CTA band. */
+    .cta-band { position: relative; overflow: hidden; text-align: center; }
+    .cta-actions { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center; align-items: center; margin-top: 2rem; }
+
+    .pad-mini { display: grid; gap: 8px; }
+  </style>
+</head>
+<body>
+
+  <!-- ===================== SHARED NAV ===================== -->
+  <nav class="site-nav" id="siteNav">
+    <div class="container">
+      <a class="brand" href="index.html" aria-label="TrackLifts home">
+        <img class="mark" src="assets/mark.svg" alt="" width="30" height="30">
+        <span class="wordmark">TRACKLIFTS</span>
+      </a>
+      <ul class="nav-links">
+        <li><a href="index.html">Overview</a></li>
+        <li><a href="features.html">Features</a></li>
+        <li><a href="index.html#progress">Progress</a></li>
+        <li><a href="download.html">Download</a></li>
+      </ul>
+      <div class="nav-actions">
+        <a class="btn btn-ghost btn-sm" href="features.html">Explore</a>
+        <a class="btn btn-ember btn-sm" href="download.html">Get the App</a>
+        <button class="nav-toggle" aria-label="Menu" aria-expanded="false">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <main id="main">
+
+    <!-- ===================== HERO ===================== -->
+    <header class="section feat-hero">
+      <span class="glow-orb floaty" style="width:340px;height:340px;background:rgba(255,122,51,0.22);top:-60px;right:-40px;" aria-hidden="true"></span>
+      <span class="glow-orb" style="width:280px;height:280px;background:rgba(58,110,165,0.16);bottom:-80px;left:-60px;" aria-hidden="true"></span>
+      <div class="container">
+        <div class="hero-grid">
+          <div>
+            <p class="eyebrow" data-reveal>The full tour</p>
+            <h1 data-reveal data-reveal-delay="1">EVERYTHING YOU<br>NEED TO <span class="ember-fill">OUTLIFT</span><br>YESTERDAY</h1>
+            <p class="lead" data-reveal data-reveal-delay="2" style="margin-top:1.6rem;">
+              TrackLifts is a focused strength log built around one idea: progressive overload you can
+              measure. Log fast, organize movements and splits in one place, and watch every lift,
+              set, and PR climb in living charts. No bloat. No account. Just the iron.
+            </p>
+            <div class="row wrap" style="gap:1rem;margin-top:2.2rem;" data-reveal data-reveal-delay="3">
+              <a class="btn btn-ember" href="download.html">Get the App</a>
+              <a class="btn btn-ghost" href="#logging">See how it works</a>
+            </div>
+            <div class="row wrap" style="gap:0.6rem;margin-top:1.8rem;" data-reveal data-reveal-delay="4">
+              <span class="chip">69 Exercises</span>
+              <span class="chip chip-ink">7 Muscle Groups</span>
+              <span class="chip chip-ink">3 Progress Metrics</span>
+              <span class="chip chip-ink">100% Offline</span>
+            </div>
+          </div>
+          <div class="split-media" data-reveal data-reveal-delay="2">
+            <div class="phone floaty" data-parallax="10">
+              <div class="phone-screen">
+                <div class="scr">
+                  <div class="app-eyebrow">Train · Track · Repeat</div>
+                  <div class="app-title">TRAINING LOG</div>
+                  <div class="app-btn">+ Log Today's Workout</div>
+                  <div class="app-card accent">
+                    <div class="row" style="justify-content:space-between;align-items:flex-start;">
+                      <div><div class="app-row-wd">Monday</div><div class="app-row-date">JUN 8</div></div>
+                      <span class="app-pill">Push</span>
+                    </div>
+                    <div class="app-mini" style="margin-top:6px;">Bench · Incline DB · Cable Fly</div>
+                    <div class="row" style="margin-top:8px;gap:6px;">
+                      <span class="app-pill" style="color:var(--ink);background:var(--surface-raised);">5 LIFTS</span>
+                      <span class="app-pill" style="color:var(--ink);background:var(--surface-raised);">18 SETS</span>
+                      <span class="app-pill" style="color:var(--ink);background:var(--surface-raised);">7,420 KG</span>
+                    </div>
+                  </div>
+                  <div class="app-card">
+                    <div class="row" style="justify-content:space-between;align-items:flex-start;">
+                      <div><div class="app-row-wd">Saturday</div><div class="app-row-date">JUN 6</div></div>
+                      <span class="app-pill" style="color:var(--ink);background:var(--surface-raised);">Legs</span>
+                    </div>
+                    <div class="app-mini" style="margin-top:6px;">Squat · RDL · Leg Press</div>
+                  </div>
+                </div>
+                <div class="app-tabbar"><div class="on"><i>▦</i>Log</div><div><i>▤</i>Library</div><div><i>◷</i>Progress</div><div><i>⚙</i>Settings</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <hr class="divider">
+
+    <!-- ===================== 1 · LOGGING ===================== -->
+    <section class="section" id="logging">
+      <div class="container">
+        <div class="split">
+          <div>
+            <span class="grp-index" data-reveal>01</span>
+            <p class="eyebrow" data-reveal>Logging</p>
+            <h2 data-reveal data-reveal-delay="1">LOGGING THAT<br>KEEPS UP WITH YOU</h2>
+            <p class="lead" data-reveal data-reveal-delay="2" style="margin-top:1.3rem;">
+              A workout is a session of exercises, and each exercise is a stack of sets — just reps and
+              weight. Add them as fast as you can hit them. The math runs itself.
+            </p>
+            <ul class="feat-list">
+              <li data-reveal data-reveal-delay="2">
+                <span class="tick" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+                <span><strong>Sets that take two taps</strong><span class="sub">Punch in reps and weight per set; reorder exercises with a drag when your plan changes mid-session.</span></span>
+              </li>
+              <li data-reveal data-reveal-delay="3">
+                <span class="tick" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+                <span><strong>Totals, automatically</strong><span class="sub">Every session sums its lifts, sets, and total volume the moment you log — no spreadsheet, no mental math.</span></span>
+              </li>
+              <li data-reveal data-reveal-delay="4">
+                <span class="tick" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+                <span><strong>Repeat Workout</strong><span class="sub">Bring back a previous session in one tap, then beat it. Yesterday becomes the floor, not the ceiling.</span></span>
+              </li>
+              <li data-reveal data-reveal-delay="5">
+                <span class="tick" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+                <span><strong>The date is the hero</strong><span class="sub">History rows lead with a huge <strong style="display:inline;color:var(--ember);">JUN 8</strong>, weekday in a small ember label above — so your timeline reads at a glance.</span></span>
+              </li>
+            </ul>
+          </div>
+          <div class="split-media" data-reveal data-reveal-delay="2">
+            <div class="phone floaty" data-parallax="8">
+              <div class="phone-screen">
+                <div class="scr">
+                  <div class="app-eyebrow">Session · Push Day</div>
+                  <div class="app-title" style="font-size:2rem;">BENCH PRESS</div>
+                  <div class="app-card accent">
+                    <div class="row" style="justify-content:space-between;">
+                      <span class="app-mini" style="font-weight:800;letter-spacing:0.1em;text-transform:uppercase;">Set 1</span>
+                      <span class="app-mini">8 reps · 80 kg</span>
+                    </div>
+                    <hr class="divider" style="margin:8px 0;">
+                    <div class="row" style="justify-content:space-between;">
+                      <span class="app-mini" style="font-weight:800;letter-spacing:0.1em;text-transform:uppercase;">Set 2</span>
+                      <span class="app-mini">8 reps · 82.5 kg</span>
+                    </div>
+                    <hr class="divider" style="margin:8px 0;">
+                    <div class="row" style="justify-content:space-between;">
+                      <span class="app-mini" style="font-weight:800;letter-spacing:0.1em;text-transform:uppercase;color:var(--ember);">Set 3</span>
+                      <span class="app-mini" style="color:var(--ink);">6 reps · 85 kg</span>
+                    </div>
+                  </div>
+                  <div class="app-btn" style="background:var(--surface-raised);color:var(--ink);box-shadow:none;border:1px solid var(--hairline);">↻ Repeat Last Workout</div>
+                  <div class="row" style="gap:6px;margin-top:2px;">
+                    <span class="app-pill" style="color:var(--ink);background:var(--surface-raised);">5 LIFTS</span>
+                    <span class="app-pill" style="color:var(--ink);background:var(--surface-raised);">18 SETS</span>
+                    <span class="app-pill">7,420 KG</span>
+                  </div>
+                </div>
+                <div class="app-tabbar"><div class="on"><i>▦</i>Log</div><div><i>▤</i>Library</div><div><i>◷</i>Progress</div><div><i>⚙</i>Settings</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== 2 · LIBRARY ===================== -->
+    <section class="section" id="library" style="position:relative;overflow:hidden;">
+      <span class="glow-orb" style="width:300px;height:300px;background:rgba(255,122,51,0.14);top:10%;left:-90px;" aria-hidden="true"></span>
+      <div class="container">
+        <div class="split flip">
+          <div>
+            <span class="grp-index" data-reveal>02</span>
+            <p class="eyebrow" data-reveal>Library</p>
+            <h2 data-reveal data-reveal-delay="1">ONE LIBRARY:<br>MOVEMENTS <span class="ember-fill">+</span> SPLITS</h2>
+            <p class="lead" data-reveal data-reveal-delay="2" style="margin-top:1.3rem;">
+              A single tab, one clean segmented control. Flip between every exercise you can train and the
+              routines you build from them — no hunting across menus.
+            </p>
+            <ul class="feat-list">
+              <li data-reveal data-reveal-delay="2">
+                <span class="tick" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+                <span><strong>69 exercises across 7 muscle groups</strong><span class="sub">Chest, back, legs, shoulders, arms, core and more — each colour-coded so the list reads like a map.</span></span>
+              </li>
+              <li data-reveal data-reveal-delay="3">
+                <span class="tick" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+                <span><strong>Search, favourite, customize</strong><span class="sub">Filter instantly, star the lifts you live on with a gold favourite, and add your own custom or bodyweight movements (with a BW badge).</span></span>
+              </li>
+              <li data-reveal data-reveal-delay="4">
+                <span class="tick" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+                <span><strong>Build Push / Pull / Legs</strong><span class="sub">Splits are routines made of days, each day filled with the lifts you choose — your whole week, structured.</span></span>
+              </li>
+              <li data-reveal data-reveal-delay="5">
+                <span class="tick" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+                <span><strong>Reorder &amp; bulk-favourite</strong><span class="sub">Drag days into the order you train them, and favourite a whole split's worth of lifts at once.</span></span>
+              </li>
+            </ul>
+          </div>
+          <div class="split-media" data-reveal data-reveal-delay="2">
+            <div class="phone floaty" data-parallax="8">
+              <div class="phone-screen">
+                <div class="scr">
+                  <div class="app-title" style="font-size:2rem;">LIBRARY</div>
+                  <div class="app-seg"><span class="on">Exercises</span><span>Splits</span></div>
+                  <div class="app-card" style="padding:9px 11px;">
+                    <div class="app-row">
+                      <span class="app-glyph" style="background:rgba(255,107,107,0.16);color:var(--m-chest);">◆</span>
+                      <div class="meta"><div class="ex-name">Bench Press</div><div class="ex-grp" style="color:var(--m-chest);">Chest</div></div>
+                      <span class="app-star" aria-hidden="true">★</span>
+                    </div>
+                  </div>
+                  <div class="app-card" style="padding:9px 11px;">
+                    <div class="app-row">
+                      <span class="app-glyph" style="background:rgba(77,171,247,0.16);color:var(--m-back);">◆</span>
+                      <div class="meta"><div class="ex-name">Pull-Up</div><div class="ex-grp" style="color:var(--m-back);">Back</div></div>
+                      <span class="app-bw">BW</span>
+                    </div>
+                  </div>
+                  <div class="app-card" style="padding:9px 11px;">
+                    <div class="app-row">
+                      <span class="app-glyph" style="background:rgba(151,117,250,0.16);color:var(--m-legs);">◆</span>
+                      <div class="meta"><div class="ex-name">Back Squat</div><div class="ex-grp" style="color:var(--m-legs);">Legs</div></div>
+                      <span class="app-star" aria-hidden="true">★</span>
+                    </div>
+                  </div>
+                  <div class="app-card" style="padding:9px 11px;">
+                    <div class="app-row">
+                      <span class="app-glyph" style="background:rgba(56,217,169,0.16);color:var(--m-arms);">◆</span>
+                      <div class="meta"><div class="ex-name">Barbell Curl</div><div class="ex-grp" style="color:var(--m-arms);">Arms</div></div>
+                    </div>
+                  </div>
+                  <div class="app-card" style="padding:9px 11px;">
+                    <div class="app-row">
+                      <span class="app-glyph" style="background:rgba(255,169,77,0.16);color:var(--m-shoulders);">◆</span>
+                      <div class="meta"><div class="ex-name">Overhead Press</div><div class="ex-grp" style="color:var(--m-shoulders);">Shoulders</div></div>
+                      <span class="app-star" aria-hidden="true">★</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="app-tabbar"><div><i>▦</i>Log</div><div class="on"><i>▤</i>Library</div><div><i>◷</i>Progress</div><div><i>⚙</i>Settings</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== 3 · PROGRESS ===================== -->
+    <section class="section" id="progress">
+      <div class="container">
+        <div class="split">
+          <div>
+            <span class="grp-index" data-reveal>03</span>
+            <p class="eyebrow" data-reveal>Progress</p>
+            <h2 data-reveal data-reveal-delay="1">PROGRESS<br>YOU CAN <span class="ember-fill">SEE</span></h2>
+            <p class="lead" data-reveal data-reveal-delay="2" style="margin-top:1.3rem;">
+              Native Swift Charts turn months of sessions into a line you can read in a second. Pick a
+              metric, pick a window, and watch the trend — green when it's going the right way.
+            </p>
+            <div class="grid cols-3" style="margin-top:1.8rem;gap:0.9rem;" role="list">
+              <div class="card" style="padding:1rem 1.1rem;" data-reveal data-reveal-delay="2" role="listitem">
+                <span class="num" style="font-size:1.5rem;color:var(--ember);display:block;">MAX</span>
+                <span class="stat-label" style="font-size:0.66rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--ink-2);">Max weight</span>
+              </div>
+              <div class="card" style="padding:1rem 1.1rem;" data-reveal data-reveal-delay="3" role="listitem">
+                <span class="num" style="font-size:1.5rem;color:var(--ember);display:block;">1RM</span>
+                <span class="stat-label" style="font-size:0.66rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--ink-2);">Estimated</span>
+              </div>
+              <div class="card" style="padding:1rem 1.1rem;" data-reveal data-reveal-delay="4" role="listitem">
+                <span class="num" style="font-size:1.5rem;color:var(--ember);display:block;">VOL</span>
+                <span class="stat-label" style="font-size:0.66rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--ink-2);">Total volume</span>
+              </div>
+            </div>
+            <ul class="feat-list">
+              <li data-reveal data-reveal-delay="3">
+                <span class="tick" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+                <span><strong>Range: All · 90d · 30d</strong><span class="sub">Every chart carries a windowed <strong style="display:inline;color:var(--up);">% change</strong> so you know exactly how far you've moved over the period.</span></span>
+              </li>
+              <li data-reveal data-reveal-delay="4">
+                <span class="tick" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+                <span><strong>Scope it your way</strong><span class="sub">View Tracked lifts, just your Favourites, or zoom into a single Split to see how one routine is paying off.</span></span>
+              </li>
+              <li data-reveal data-reveal-delay="5">
+                <span class="tick" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+                <span><strong>Day-grouped trend cards</strong><span class="sub">Sessions roll up by day into tidy cards, each carrying its own direction — momentum made legible.</span></span>
+              </li>
+            </ul>
+          </div>
+          <div class="split-media" data-reveal data-reveal-delay="2">
+            <div class="phone floaty" data-parallax="8">
+              <div class="phone-screen">
+                <div class="scr">
+                  <div class="app-eyebrow">Bench Press · Estimated 1RM</div>
+                  <div class="app-title" style="font-size:2rem;">PROGRESS</div>
+                  <div class="app-card">
+                    <div class="row" style="justify-content:space-between;align-items:flex-start;">
+                      <div>
+                        <div class="num" style="font-size:2rem;color:var(--ink);">102<small style="font-family:var(--font-sans);font-size:0.7rem;font-weight:600;color:var(--ink-2);"> KG</small></div>
+                        <div class="app-mini">Est. 1RM · last 90 days</div>
+                      </div>
+                      <span class="trend up">▲ 8.4%</span>
+                    </div>
+                    <div class="chart" aria-hidden="true">
+                      <span class="bar" style="height:38%;"></span>
+                      <span class="bar" style="height:46%;"></span>
+                      <span class="bar" style="height:42%;"></span>
+                      <span class="bar" style="height:58%;"></span>
+                      <span class="bar" style="height:66%;"></span>
+                      <span class="bar" style="height:61%;"></span>
+                      <span class="bar" style="height:78%;"></span>
+                      <span class="bar" style="height:92%;"></span>
+                    </div>
+                  </div>
+                  <div class="app-seg" style="font-size:0.6rem;"><span class="on">All</span><span>90d</span><span>30d</span></div>
+                  <div class="row" style="gap:6px;">
+                    <span class="app-pill">Tracked</span>
+                    <span class="app-pill" style="color:var(--ink);background:var(--surface-raised);">Favourites</span>
+                    <span class="app-pill" style="color:var(--ink);background:var(--surface-raised);">Push</span>
+                  </div>
+                </div>
+                <div class="app-tabbar"><div><i>▦</i>Log</div><div><i>▤</i>Library</div><div class="on"><i>◷</i>Progress</div><div><i>⚙</i>Settings</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== 4 · RECORDS ===================== -->
+    <section class="section" id="records" style="position:relative;overflow:hidden;">
+      <span class="glow-orb" style="width:320px;height:320px;background:rgba(255,178,62,0.16);bottom:-60px;right:-70px;" aria-hidden="true"></span>
+      <div class="container">
+        <div class="split flip">
+          <div>
+            <span class="grp-index" data-reveal>04</span>
+            <p class="eyebrow" data-reveal>Records</p>
+            <h2 data-reveal data-reveal-delay="1">RECORDS <span class="ember-fill">&amp;</span><br>MOMENTUM</h2>
+            <p class="lead" data-reveal data-reveal-delay="2" style="margin-top:1.3rem;">
+              The whole point is the next rep. TrackLifts catches every personal record the instant you set
+              it and shows you how today stacked up against last time.
+            </p>
+            <ul class="feat-list">
+              <li data-reveal data-reveal-delay="2">
+                <span class="tick" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+                <span><strong>A bold "New PR!" badge</strong><span class="sub">Break a record and the app calls it out, loud — the reward loop that keeps you coming back to the bar.</span></span>
+              </li>
+              <li data-reveal data-reveal-delay="3">
+                <span class="tick" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+                <span><strong>Session-over-session delta</strong><span class="sub">A crisp <strong style="display:inline;color:var(--up);">+3% vs last</strong> tells you whether you pushed harder than the previous time — every single session.</span></span>
+              </li>
+              <li data-reveal data-reveal-delay="4">
+                <span class="tick" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+                <span><strong>Built to feel alive</strong><span class="sub">Staggered animations, glass cards, and the warm FORGE film-grain — small touches that make logging feel like progress.</span></span>
+              </li>
+            </ul>
+          </div>
+          <div class="split-media" data-reveal data-reveal-delay="2">
+            <div class="phone floaty" data-parallax="8">
+              <div class="phone-screen">
+                <div class="scr">
+                  <div class="app-eyebrow">Records · This Week</div>
+                  <div class="app-title" style="font-size:2rem;">NEW PRs</div>
+                  <div class="app-card accent">
+                    <div class="row" style="justify-content:space-between;align-items:center;">
+                      <div class="ex-name" style="font-size:0.82rem;">Deadlift</div>
+                      <span class="app-pill chip-filled" style="color:#120A05;">NEW PR!</span>
+                    </div>
+                    <div class="row" style="justify-content:space-between;align-items:flex-end;margin-top:6px;">
+                      <div class="num" style="font-size:2.2rem;color:var(--ink);">180<small style="font-family:var(--font-sans);font-size:0.7rem;font-weight:600;color:var(--ink-2);"> KG</small></div>
+                      <span class="trend up">▲ +3% vs last</span>
+                    </div>
+                  </div>
+                  <div class="app-card">
+                    <div class="row" style="justify-content:space-between;align-items:center;">
+                      <div class="ex-name" style="font-size:0.82rem;">Back Squat</div>
+                      <span class="app-pill chip-filled" style="color:#120A05;">NEW PR!</span>
+                    </div>
+                    <div class="row" style="justify-content:space-between;align-items:flex-end;margin-top:6px;">
+                      <div class="num" style="font-size:2.2rem;color:var(--ink);">140<small style="font-family:var(--font-sans);font-size:0.7rem;font-weight:600;color:var(--ink-2);"> KG</small></div>
+                      <span class="trend up">▲ +5% vs last</span>
+                    </div>
+                  </div>
+                  <div class="app-card" style="padding:9px 11px;">
+                    <div class="row" style="justify-content:space-between;align-items:center;">
+                      <div class="ex-name" style="font-size:0.82rem;">Bench Press</div>
+                      <span class="app-mini">86 kg · matched</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="app-tabbar"><div><i>▦</i>Log</div><div><i>▤</i>Library</div><div class="on"><i>◷</i>Progress</div><div><i>⚙</i>Settings</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <hr class="divider">
+
+    <!-- ===================== SPECS / IN THE BOX ===================== -->
+    <section class="section-sm" id="specs">
+      <div class="container">
+        <div style="max-width:640px;margin-bottom:2.6rem;" data-reveal>
+          <p class="eyebrow">In the box</p>
+          <h2>BUILT LEAN.<br>STOCKED DEEP.</h2>
+        </div>
+        <div class="spec-list" data-reveal data-reveal-delay="1">
+          <div class="spec">
+            <span class="spec-k">Exercise catalog</span>
+            <span class="spec-v"><span data-count="69">69</span> <small>movements</small></span>
+          </div>
+          <div class="spec">
+            <span class="spec-k">Muscle groups</span>
+            <span class="spec-v"><span data-count="7">7</span> <small>colour-coded</small></span>
+          </div>
+          <div class="spec">
+            <span class="spec-k">Progress metrics</span>
+            <span class="spec-v"><span data-count="3">3</span> <small>max · 1RM · volume</small></span>
+          </div>
+          <div class="spec">
+            <span class="spec-k">Units</span>
+            <span class="spec-v">KG <small>+ LB, your call</small></span>
+          </div>
+          <div class="spec">
+            <span class="spec-k">Platform</span>
+            <span class="spec-v">iOS 26<small> &nbsp;iPhone, or later</small></span>
+          </div>
+          <div class="spec">
+            <span class="spec-k">Your data</span>
+            <span class="spec-v">100%<small> on device · offline</small></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <hr class="divider">
+
+    <!-- ===================== FAQ ===================== -->
+    <section class="section" id="faq">
+      <div class="container">
+        <div class="center" style="margin-bottom:2.8rem;" data-reveal>
+          <p class="eyebrow" style="justify-content:center;">Questions</p>
+          <h2>THE STRAIGHT ANSWERS</h2>
+        </div>
+        <div class="faq">
+          <details data-reveal>
+            <summary>Is TrackLifts free?<span class="q-mark" aria-hidden="true">+</span></summary>
+            <div class="faq-body"><p>Yes — download it from the App Store and start logging. No paywall stands between you and tracking your lifts.</p></div>
+          </details>
+          <details data-reveal data-reveal-delay="1">
+            <summary>Do I need an account, or does it sync?<span class="q-mark" aria-hidden="true">+</span></summary>
+            <div class="faq-body"><p>No account, no sign-up, no cloud login. TrackLifts is built to be opened and used. Your training history lives in the app on your iPhone — there's nothing to log into.</p></div>
+          </details>
+          <details data-reveal data-reveal-delay="2">
+            <summary>Does it work offline?<span class="q-mark" aria-hidden="true">+</span></summary>
+            <div class="faq-body"><p>Completely. Every feature — logging, the library, charts, PRs — runs locally with zero network required. The basement gym with no signal is no problem.</p></div>
+          </details>
+          <details data-reveal data-reveal-delay="3">
+            <summary>Can I track bodyweight exercises?<span class="q-mark" aria-hidden="true">+</span></summary>
+            <div class="faq-body"><p>Yes. Mark a movement as bodyweight and it carries a clear <strong style="color:var(--ink);">BW</strong> badge in the library. You can also add your own custom exercises whenever the catalog is missing one.</p></div>
+          </details>
+          <details data-reveal data-reveal-delay="4">
+            <summary>Kilograms or pounds?<span class="q-mark" aria-hidden="true">+</span></summary>
+            <div class="faq-body"><p>Both. Choose kg or lb in Settings and every weight, total, and chart follows your preference throughout the app.</p></div>
+          </details>
+          <details data-reveal data-reveal-delay="5">
+            <summary>Is there an Apple Watch app?<span class="q-mark" aria-hidden="true">+</span></summary>
+            <div class="faq-body"><p>Today TrackLifts is a focused iPhone experience, designed to give every metric room to breathe on a full screen. A wrist companion is on the radar — for now, your phone is home base.</p></div>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== FINAL CTA ===================== -->
+    <section class="section cta-band">
+      <span class="glow-orb floaty" style="width:380px;height:380px;background:rgba(255,122,51,0.20);top:-40px;left:50%;transform:translateX(-50%);" aria-hidden="true"></span>
+      <div class="container z1">
+        <p class="eyebrow" style="justify-content:center;" data-reveal>Train · Track · Repeat</p>
+        <h2 data-reveal data-reveal-delay="1">PUT YESTERDAY<br>IN THE <span class="ember-fill">REAR-VIEW</span></h2>
+        <p class="lead mx-auto" data-reveal data-reveal-delay="2" style="margin-top:1.4rem;text-align:center;">
+          Free on iPhone. No account. Fully offline. Just you, the bar, and a number that keeps going up.
+        </p>
+        <div class="cta-actions" data-reveal data-reveal-delay="3">
+          <a class="store-badge" href="download.html" aria-label="Download TrackLifts on the App Store">
+            <span class="sb-mark" aria-hidden="true"><svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.4 12.7c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.1-2.8.9-3.5.9-.7 0-1.8-.8-3-.8-1.5 0-3 .9-3.8 2.3-1.6 2.8-.4 7 1.2 9.3.8 1.1 1.7 2.4 2.9 2.3 1.2-.1 1.6-.7 3-.7 1.4 0 1.8.7 3 .7 1.2 0 2-1.1 2.8-2.2.9-1.3 1.2-2.5 1.3-2.6-.1 0-2.5-1-2.5-3.8zM14.1 5.9c.6-.8 1-1.9.9-3-.9 0-2 .6-2.7 1.4-.6.7-1.1 1.8-.9 2.9 1 .1 2-.5 2.7-1.3z"/></svg></span>
+            <span><small>Download on the</small><strong>App Store</strong></span>
+          </a>
+          <a class="btn btn-ghost" href="download.html">View download page</a>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ===================== SHARED FOOTER ===================== -->
+  <footer class="site-footer">
+    <div class="container">
+      <div class="foot-grid">
+        <div>
+          <a class="brand" href="index.html"><img class="mark" src="assets/mark.svg" alt="" width="28" height="28"><span class="wordmark">TRACKLIFTS</span></a>
+          <p style="margin-top:1rem;max-width:34ch;">Train. Track. Repeat. The strength log that turns every rep into measurable progress.</p>
+        </div>
+        <div><h4>Product</h4><ul><li><a href="features.html">Features</a></li><li><a href="index.html#progress">Progress</a></li><li><a href="download.html">Download</a></li><li><a href="index.html#splits">Splits</a></li></ul></div>
+        <div><h4>Company</h4><ul><li><a href="#">About</a></li><li><a href="#">Blog</a></li><li><a href="#">Careers</a></li></ul></div>
+        <div><h4>Support</h4><ul><li><a href="#">Help</a></li><li><a href="download.html">Download</a></li><li><a href="#">Privacy</a></li></ul></div>
+      </div>
+      <div class="foot-bottom"><span>© <span data-year>2026</span> TrackLifts. Built for the iron.</span><span class="muted">Designed in the FORGE.</span></div>
+    </div>
+  </footer>
+  <script src="app.js"></script>
+</body>
+</html>

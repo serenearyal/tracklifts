@@ -20,6 +20,7 @@ struct trackliftsApp: App {
             WorkoutSession.self,
             LoggedExercise.self,
             LoggedSet.self,
+            BodyWeightEntry.self,
         ])
         do {
             return try ModelContainer(for: schema)
