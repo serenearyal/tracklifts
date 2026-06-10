@@ -1,62 +1,105 @@
-# Task: IA restructure — 5 tabs → Today · Train · Food · Progress
+# Task: iCloud sync — CloudKit private DB + KVS prefs + seed dedup
 
 Plan: `~/.claude/plans/enumerated-discovering-newt.md` (2026-06-09)
 
-Consolidate the tab bar so the app scales with roadmap Phases 2–5. New Today
-dashboard (first tab), Train merges Log+Library, Settings demoted to a gear
-pushed from Today.
+User data must survive delete/reinstall and sync across devices. No accounts,
+no server. SwiftData+CloudKit for the 11 models, NSUbiquitousKeyValueStore for
+prefs, idempotent dedup for the seeded catalog.
 
 ## Checklist
 
-- [x] 1. `Models/Workout.swift`: add `WorkoutSession.blank(in:)` + `.repeated(from:in:)` factories
-- [x] 2. `Models/Nutrition.swift`: add `Meal.defaultForNow`
-- [x] 3. `Shared/Components.swift`: move `MacroProgressBar` + `MacroStat` in
-- [x] 4. `FoodDiaryView.swift`: drop moved structs + `defaultMealForNow`
-- [x] 5. `WorkoutHistoryView.swift`: embeddable (no NavigationStack/background), light header, use factories
-- [x] 6. NEW `Features/Train/TrainView.swift`: 3-segment switcher (Log | Splits | Exercises)
-- [x] 7. DELETE `Features/Library/LibraryView.swift`; fix stale comments in siblings
-- [x] 8. NEW `Features/Today/TodayView.swift`: dashboard (nutrition / training / weight / week)
-- [x] 9. `SettingsView.swift`: remove own NavigationStack (now pushed from Today)
-- [x] 10. `ContentView.swift`: AppTab enum, 4-tab TabView(selection:)
-- [x] 11. `trackliftsUITests.swift`: update tab/segment strings (compile only, don't run)
-- [x] 12. Docs: roadmap changelog entry + review section here
-- [x] Build passes (`build-for-testing` on fresh iPhone 17 sim id)
+- [x] 1. Model inverses: `Exercise.splitItems`/`.loggedExercises`, `FoodItem.diaryEntries` (.nullify)
+- [x] 2. NEW `Shared/CloudSync.swift`: container id, hermetic detection, `makeContainer()`
+- [x] 3. `trackliftsApp.swift`: use `CloudSync.makeContainer()` + `CloudPrefs.shared.start()`
+- [x] 4. NEW `tracklifts.entitlements`: iCloud/CloudKit + aps + KVS
+- [x] 5. `project.pbxproj`: CODE_SIGN_ENTITLEMENTS + UIBackgroundModes (app target only, 4 lines)
+- [x] 6. NEW `Data/CloudDedup.swift`: import-triggered + debounced seed dedup
+- [x] 7. NEW `Shared/CloudPrefs.swift`: KVS mirror, monotonic didOnboard
+- [x] 8. `ContentView.swift`: CloudDedup.start in .task + scenePhase hook
+- [x] 9. `SeedManager.swift`: body-weight seed guard when remote says onboarded
+- [x] 10. `SettingsView.swift`: iCloud Sync status card
+- [x] 11. NEW `trackliftsTests/CloudSyncTests.swift`: dedup + prefs logic tests
+- [x] 12. Docs: roadmap changelog (incl. release-blocking ops steps) + review here
+- [x] Build green + logic tests pass
 
-## Review (2026-06-09)
+## Review (2026-06-10)
 
-**Tab bar: Today · Train · Food · Progress** (was Log · Food · Library · Progress · Settings).
+**What shipped**
+- `CloudSync.makeContainer()`: `.private("iCloud.serene.tracklifts")` for real launches;
+  **in-memory `.none`** for hermetic launches (`--reset-store`/`--seed-sample`/
+  `--show-onboarding`/`--local-store`, unit-test host via `XCTestConfigurationFilePath`,
+  previews) so test runs can't pollute the real store or export tombstones to iCloud;
+  on CloudKit init failure falls back to the on-disk store without sync (never bricks).
+- CloudKit-required inverses added (additive → lightweight migration): `Exercise.splitItems`,
+  `Exercise.loggedExercises`, `FoodItem.diaryEntries`, all `.nullify` (UI already nil-tolerant).
+- `CloudDedup`: collapses duplicate **seed-origin** records after CloudKit merges
+  (every fresh install seeds before first import). Deterministic canonical (oldest
+  `createdAt`), favorite OR, bodyweight "differs-from-library-default wins", referrers
+  re-pointed via the to-one side with inverse arrays snapshotted first (iOS 17 rule).
+  Runs at launch, on `NSPersistentCloudKitContainer` import-finished events, and on
+  scenePhase-active (debounced 30s/5s).
+- `CloudPrefs`: iCloud KVS mirror of 13 prefs (profile ×8, goals ×4, weightUnit) +
+  **monotonic `didOnboard`** (true is pushed/adopted; false never propagates — so
+  "Recalculate" on one device can't re-onboard the others). Fresh-install adoption
+  restores prefs and skips onboarding. Compare-before-write loop guard.
+- Settings: iCloud Sync status card (`CKContainer.accountStatus`, refreshes on
+  `.CKAccountChanged`); honest copy for signed-out state.
+- `seedBodyWeightIfNeeded` skips the legacy-value seed when KVS says the account
+  already onboarded (real weigh-ins are en route).
 
-- **Today** (`Features/Today/TodayView.swift`, new): date header + gear → pushes
-  `SettingsView`; nutrition card (kcal vs goal, LEFT/OVER, macro bars — tap jumps to
-  Food tab via `AppTab` binding, + presents `FoodSearchView`); training card
-  (`EmberButton` "Log Today's Workout" + ghost "Repeat Last Workout" via the new
-  `WorkoutSession` factories, or today's `SessionRow`s once logged); body-weight card
-  (`BodyWeightSummaryCard` → `BodyWeightView`, + presents `AddBodyWeightSheet`,
-  `BodyMetrics.refreshCurrent` kept in sync via `onChange`); this-week `StatTile` strip.
-- **Train** (`Features/Train/TrainView.swift`, new): `LibraryView` pattern generalized to
-  3 segments — Log (refactored embeddable `WorkoutHistoryView` with sibling-style
-  `Eyebrow` + plus-circle header) | Splits | Exercises. `LibraryView.swift` deleted;
-  segment ids now `trainSegment.*`.
-- **Settings**: own `NavigationStack` removed (it's a pushed destination now), content
-  untouched.
-- Reused throughout: `MacroProgressBar`/`MacroStat` (moved to `Shared/Components.swift`),
-  `SessionRow`, `Meal.defaultForNow` (extracted to model), session clone logic
-  (extracted to `WorkoutSession.repeated(from:in:)`).
+**Verification**
+- `build-for-testing` clean, **zero warnings** (fixed a Sendable capture by holding the
+  ModelContext in MainActor static state instead of the observer closure).
+- `trackliftsTests`: **25/25 pass** — 10 new (4 CloudDedup: merge+re-point, explicit
+  bodyweight-unmark wins, diary re-point + portion cascade, idempotency; 6 CloudPrefs:
+  adoption, no-adoption-when-onboarded, monotonic didOnboard both directions,
+  no-ping-pong, unset-keys-never-pushed) on iPhone 17 / iOS 26.2 sim.
+- UI suite not run (convention) — unaffected: hermetic flags cover all 3 launch sites.
 
-**Verification:** `build-for-testing` clean (zero warnings) on iPhone 17 / iOS 26.2 sim
-(deployment target 17.0, classic `TabView(selection:) + .tabItem` API only);
-`trackliftsTests` logic suite **TEST SUCCEEDED**. UI suite updated to the new tab/segment
-names but intentionally not run (flaky; manual testing preferred).
+**Manual sync test recipe (user)**
+1. Sign the sim into iCloud (Settings → Apple ID). Run the app from Xcode (no launch args).
+2. Onboard, log a workout + food + weigh-in, favorite an exercise. Background the app;
+   `xcrun simctl icloud_sync booted`. Check CloudKit Console → tracklifts container →
+   Development → Private DB → zone `com.apple.coredata.cloudkit.zone` for `CD_*` records.
+3. Delete the app → reinstall → run: onboarding should be skipped (KVS), targets/unit
+   restored, logs stream back; the library may briefly show duplicates, then collapse
+   to 69+custom after the import-triggered dedup. Sims get no push: every "wait" =
+   background/foreground cycle + `simctl icloud_sync`.
+4. Optional two-device: second sim, same Apple ID; edit goalEnergy on one, foreground
+   the other. Test on a real device before release.
 
-**Manual smoke checklist:**
-1. Launch → Today shows date header, 0-kcal nutrition card, Log Today's Workout, weight card.
-2. Today: + on Nutrition → food search sheet; logging a food updates the card; card tap → Food tab.
-3. Today: Log Today's Workout → New Workout sheet; after Done the session appears as a card; + still available in the Training row.
-4. Today: Repeat Last Workout clones the most recent session.
-5. Today: + on Body Weight → weigh-in sheet; card updates; card tap → full Body Weight log.
-6. Gear → Settings pushes (back button returns); Body Weight + Recalculate still work from there.
-7. Train tab: Log | Splits | Exercises segments all render; history push/edit, repeat/delete context menu, split editor, exercise detail all behave as before.
-8. Food and Progress tabs unchanged; onboarding gate unchanged.
+**Addendum (2026-06-10): first device test lost data — observability added.**
+User deleted the app on the phone before the initial CloudKit export had ever
+completed (KVS prefs made it up — they're instant — so onboarding was skipped
+and targets restored, but the logs never reached iCloud). Root gap: a CloudKit
+setup failure or pending first export was invisible — the Settings card only
+showed *account* status. Added: `CloudSync.mode` (cloudKit / localFallback(reason)
+/ hermetic — fallback no longer silent), `CloudSyncMonitor` (@Observable; records
+last export/import/setup event + last error from
+`NSPersistentCloudKitContainer.eventChangedNotification`, logs via os.Logger
+subsystem `serene.tracklifts` category `cloudsync`), and the Settings card now
+shows true health: mode errors in red, "last activity Xm ago", "Waiting for the
+first sync…" before the initial upload. **Rule: never delete the app until the
+card shows recent sync activity (or CD_* records are visible in CloudKit
+Console → Development).**
 
-**Follow-up (not done here):** `website/` marketing copy still describes the old
-Log/Library tab layout; refresh screenshots + copy when the new IA settles.
+**Addendum 2 (2026-06-10): root cause of the device failure — fixed.**
+The Settings card surfaced `SwiftDataError error 1` on the user's phone.
+Reproduced in the sim; unified log showed CoreData 134060: *"CloudKit
+integration requires that all relationships be optional"* — non-optional
+to-many arrays (`var days: [SplitDay] = []`) fail validation even with
+defaults, so the CloudKit container had NEVER come up anywhere (which is the
+true cause of the data loss: nothing ever uploaded). Fix: all 8 to-many
+relationships now `[T]? = []`; `orderedX` accessors absorb the unwrap; new
+`entryCount`/`setCount`/`dayCount`/`itemCount` conveniences; ~20 call sites
+updated. `CloudSync` now logs the full underlying error chain (os.Logger
+`serene.tracklifts`/`cloudsync`). Verified: sim launch logs **"CloudKit-backed
+container up"** (followed only by Cocoa 134400 = sim not signed into iCloud,
+expected); 25/25 logic tests pass; zero warnings. Lesson captured in
+`tasks/lessons.md`.
+
+**Release blockers (ops, not code)** — also in the roadmap changelog:
+- Paid Apple Developer Program on team M9Q5YCJ5NU; build once in Xcode with automatic
+  signing to auto-register the `iCloud.serene.tracklifts` container.
+- CloudKit Console: deploy schema Development → Production **before** TestFlight/App
+  Store; re-deploy after future model changes (keep them additive).

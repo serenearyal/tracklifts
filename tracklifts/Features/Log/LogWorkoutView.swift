@@ -61,7 +61,7 @@ struct LogWorkoutView: View {
         .navigationTitle(isNew ? "New Workout" : "Edit Workout")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if session.entries.count > 1 {
+            if session.entryCount > 1 {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { presentReorder() } label: {
                         Image(systemName: "arrow.up.arrow.down")
@@ -89,7 +89,7 @@ struct LogWorkoutView: View {
             ReorderSheet(request: request)
         }
         .onDisappear {
-            if isNew && session.entries.isEmpty { context.delete(session) }
+            if isNew && session.entryCount == 0 { context.delete(session) }
         }
     }
 
@@ -177,9 +177,9 @@ struct LogWorkoutView: View {
     // MARK: - Mutations
 
     private func add(_ exercises: [Exercise]) {
-        var order = session.entries.count
+        var order = session.entryCount
         for exercise in exercises {
-            if session.entries.contains(where: { $0.exercise?.persistentModelID == exercise.persistentModelID }) {
+            if (session.entries ?? []).contains(where: { $0.exercise?.persistentModelID == exercise.persistentModelID }) {
                 continue
             }
             let entry = LoggedExercise(exercise: exercise, order: order)
@@ -195,7 +195,7 @@ struct LogWorkoutView: View {
         let new = LoggedSet(
             reps: last?.reps ?? prefilledReps(for: entry),
             weight: last?.weight ?? prefilledWeight(for: entry),
-            order: entry.sets.count
+            order: entry.setCount
         )
         new.loggedExercise = entry
         context.insert(new)
@@ -222,8 +222,8 @@ struct LogWorkoutView: View {
             .filter { isBefore($0) }
             .sorted { $0.date != $1.date ? $0.date > $1.date : $0.createdAt > $1.createdAt }
         for past in priorSessions {
-            if let match = past.entries.first(where: {
-                $0.exercise?.persistentModelID == exercise.persistentModelID && !$0.sets.isEmpty
+            if let match = (past.entries ?? []).first(where: {
+                $0.exercise?.persistentModelID == exercise.persistentModelID && $0.setCount > 0
             }) {
                 return match
             }
@@ -266,7 +266,7 @@ struct LogWorkoutView: View {
         guard let exercise = entry.exercise else { return 0 }
         var best = 0.0
         for past in allSessions where isBefore(past) {
-            for e in past.entries where e.exercise?.persistentModelID == exercise.persistentModelID {
+            for e in past.entries ?? [] where e.exercise?.persistentModelID == exercise.persistentModelID {
                 best = max(best, e.bestEstimatedOneRepMax)
             }
         }

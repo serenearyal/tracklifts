@@ -10,31 +10,15 @@ import SwiftData
 
 @main
 struct trackliftsApp: App {
-    /// One shared container for every SwiftData model in the app.
-    let container: ModelContainer = {
-        let schema = Schema([
-            Exercise.self,
-            Split.self,
-            SplitDay.self,
-            SplitItem.self,
-            WorkoutSession.self,
-            LoggedExercise.self,
-            LoggedSet.self,
-            BodyWeightEntry.self,
-            FoodItem.self,
-            FoodPortion.self,
-            DiaryEntry.self,
-        ])
-        do {
-            return try ModelContainer(for: schema)
-        } catch {
-            fatalError("Could not create ModelContainer: \(error)")
-        }
-    }()
+    /// One shared container for every SwiftData model in the app — CloudKit-
+    /// backed for real launches, hermetic in-memory for tests and previews.
+    let container: ModelContainer = CloudSync.makeContainer()
 
     init() {
         AppFonts.register()
         Appearance.configure()
+        CloudPrefs.shared.start()
+        CloudSyncMonitor.shared.start()
     }
 
     var body: some Scene {

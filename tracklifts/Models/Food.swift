@@ -24,8 +24,14 @@ final class FoodItem {
     var isFavorite: Bool = false
     var createdAt: Date = Date()
 
+    // Optional because CloudKit requires every relationship to be optional.
     @Relationship(deleteRule: .cascade, inverse: \FoodPortion.food)
-    var portions: [FoodPortion] = []
+    var portions: [FoodPortion]? = []
+
+    // CloudKit-required inverse of DiaryEntry.food. Deleting a food nullifies
+    // the diary's back-reference; entries keep their nutrient snapshots.
+    @Relationship(deleteRule: .nullify, inverse: \DiaryEntry.food)
+    var diaryEntries: [DiaryEntry]? = []
 
     init(name: String, brand: String = "", source: FoodSource = .seed,
          per100g: NutrientVector, barcode: String = "", isCustom: Bool = false) {
@@ -47,7 +53,7 @@ final class FoodItem {
     var source: FoodSource { FoodSource(rawValue: sourceRaw) ?? .custom }
 
     var orderedPortions: [FoodPortion] {
-        portions.sorted { $0.order < $1.order }
+        (portions ?? []).sorted { $0.order < $1.order }
     }
 
     /// Default serving — the first portion, falling back to a 100 g serving.
@@ -89,7 +95,8 @@ final class DiaryEntry {
     var nutrientData: Data = Data()
     var order: Int = 0
     var createdAt: Date = Date()
-    /// Reference to the source food (nullified, not cascaded, on food deletion).
+    /// Reference to the source food. Nullified (not cascaded) when the food is
+    /// deleted — the rule lives on the inverse, `FoodItem.diaryEntries`.
     var food: FoodItem?
 
     init(date: Date, meal: Meal, food: FoodItem, grams: Double, portionLabel: String = "", order: Int = 0) {

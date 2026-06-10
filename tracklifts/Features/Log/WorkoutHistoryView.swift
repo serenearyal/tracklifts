@@ -108,7 +108,7 @@ struct SessionRow: View {
                     }
                 }
 
-                if session.entries.isEmpty {
+                if session.entryCount == 0 {
                     Text("Empty session")
                         .font(.sans(13))
                         .foregroundStyle(Palette.inkTertiary)
@@ -118,7 +118,7 @@ struct SessionRow: View {
                         .foregroundStyle(Palette.inkSecondary)
                         .lineLimit(1)
                     HStack(spacing: 8) {
-                        miniStat("\(session.entries.count)", "lifts")
+                        miniStat("\(session.entryCount)", "lifts")
                         miniStat("\(session.totalSets)", "sets")
                         miniStat(Int(session.totalVolume).formatted(), unit.label)
                     }

@@ -21,6 +21,15 @@ final class Exercise {
     var notes: String = ""
     var createdAt: Date = Date()
 
+    // CloudKit requires every relationship to have an inverse AND to be
+    // optional; these are the inverse sides of SplitItem.exercise /
+    // LoggedExercise.exercise. Deleting an exercise nullifies the refs (the
+    // UI already renders nil exercises safely via compactMap / chaining).
+    @Relationship(deleteRule: .nullify, inverse: \SplitItem.exercise)
+    var splitItems: [SplitItem]? = []
+    @Relationship(deleteRule: .nullify, inverse: \LoggedExercise.exercise)
+    var loggedExercises: [LoggedExercise]? = []
+
     init(
         name: String,
         muscleGroup: MuscleGroup,

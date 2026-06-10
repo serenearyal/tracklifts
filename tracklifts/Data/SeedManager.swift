@@ -41,6 +41,9 @@ enum SeedManager {
     static func seedBodyWeightIfNeeded(_ context: ModelContext) {
         let count = (try? context.fetchCount(FetchDescriptor<BodyWeightEntry>())) ?? 0
         guard count == 0, BodyMetrics.current > 0 else { return }
+        // An established iCloud user's weigh-ins are about to sync in — don't
+        // seed a stray legacy point alongside them.
+        guard !(CloudSync.isEnabled && CloudPrefs.shared.remoteSaysOnboarded) else { return }
         context.insert(BodyWeightEntry(date: .now, weight: BodyMetrics.current))
         try? context.save()
     }

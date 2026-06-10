@@ -159,7 +159,7 @@ struct ProgressOverviewView: View {
         var result: [Exercise] = []
         for session in sessions {
             for entry in session.orderedEntries {
-                guard let ex = entry.exercise, !entry.sets.isEmpty else { continue }
+                guard let ex = entry.exercise, entry.setCount > 0 else { continue }
                 if seen.insert(ex.persistentModelID).inserted { result.append(ex) }
             }
         }

@@ -16,7 +16,7 @@ struct ExerciseDetailView: View {
 
     private var history: [(session: WorkoutSession, entry: LoggedExercise)] {
         sessions.compactMap { session in
-            guard let entry = session.entries.first(where: {
+            guard let entry = (session.entries ?? []).first(where: {
                 $0.exercise?.persistentModelID == exercise.persistentModelID
             }) else { return nil }
             return (session, entry)
@@ -137,7 +137,7 @@ struct ExerciseDetailView: View {
                                 .font(.sans(14, .bold))
                                 .foregroundStyle(Palette.ink)
                             Spacer()
-                            Text("\(item.entry.sets.count) sets")
+                            Text("\(item.entry.setCount) sets")
                                 .font(.sans(11, .semibold))
                                 .foregroundStyle(Palette.inkSecondary)
                         }

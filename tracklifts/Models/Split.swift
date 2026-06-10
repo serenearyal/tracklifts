@@ -15,8 +15,9 @@ final class Split {
     var order: Int = 0
     var createdAt: Date = Date()
 
+    // Optional because CloudKit requires every relationship to be optional.
     @Relationship(deleteRule: .cascade, inverse: \SplitDay.split)
-    var days: [SplitDay] = []
+    var days: [SplitDay]? = []
 
     init(name: String, order: Int = 0) {
         self.name = name
@@ -25,8 +26,10 @@ final class Split {
     }
 
     var orderedDays: [SplitDay] {
-        days.sorted { $0.order < $1.order }
+        (days ?? []).sorted { $0.order < $1.order }
     }
+
+    var dayCount: Int { days?.count ?? 0 }
 }
 
 @Model
@@ -35,8 +38,9 @@ final class SplitDay {
     var order: Int = 0
     var split: Split?
 
+    // Optional because CloudKit requires every relationship to be optional.
     @Relationship(deleteRule: .cascade, inverse: \SplitItem.day)
-    var items: [SplitItem] = []
+    var items: [SplitItem]? = []
 
     init(name: String, order: Int) {
         self.name = name
@@ -44,8 +48,10 @@ final class SplitDay {
     }
 
     var orderedItems: [SplitItem] {
-        items.sorted { $0.order < $1.order }
+        (items ?? []).sorted { $0.order < $1.order }
     }
+
+    var itemCount: Int { items?.count ?? 0 }
 
     var exercises: [Exercise] {
         orderedItems.compactMap(\.exercise)

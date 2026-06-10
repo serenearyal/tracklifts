@@ -73,9 +73,9 @@ enum ProgressCalculator {
     ) -> [ProgressPoint] {
         var points: [ProgressPoint] = []
         for session in sessions {
-            let entries = session.entries.filter { $0.exercise?.persistentModelID == exercise.persistentModelID }
+            let entries = (session.entries ?? []).filter { $0.exercise?.persistentModelID == exercise.persistentModelID }
             guard !entries.isEmpty else { continue }
-            let allSets = entries.flatMap(\.sets).filter { $0.reps > 0 }
+            let allSets = entries.flatMap { $0.sets ?? [] }.filter { $0.reps > 0 }
             guard !allSets.isEmpty else { continue }
 
             let value: Double

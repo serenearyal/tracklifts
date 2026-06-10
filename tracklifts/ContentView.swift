@@ -18,6 +18,7 @@ enum AppTab: Hashable {
 
 struct RootView: View {
     @Environment(\.modelContext) private var context
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage(Profile.didOnboardKey) private var didOnboard = false
     @State private var selectedTab: AppTab = .today
 
@@ -53,6 +54,13 @@ struct RootView: View {
                 BodyMetrics.current = 0
                 didOnboard = false
             }
+            // Collapse seed duplicates after CloudKit merges another device's
+            // (or a pre-reinstall) store into this one. Seeding above stays
+            // first so offline fresh installs still get a full library.
+            CloudDedup.start(context: context)
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { CloudDedup.runIfDue(context) }
         }
         .fullScreenCover(isPresented: Binding(get: { !didOnboard }, set: { didOnboard = !$0 })) {
             OnboardingView()

@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import CloudKit
 
 struct SettingsView: View {
     @AppStorage("weightUnit") private var unit: WeightUnit = .kg
@@ -17,6 +18,8 @@ struct SettingsView: View {
     @AppStorage(NutritionGoals.fatKey) private var goalFat = NutritionGoals.defaultFat
     @AppStorage(Profile.goalKey) private var goalRaw = FitnessGoal.maintain.rawValue
     @AppStorage(Profile.didOnboardKey) private var didOnboard = false
+
+    @State private var iCloudStatus: CKAccountStatus?
 
     var body: some View {
         ScrollView {
@@ -102,6 +105,23 @@ struct SettingsView: View {
                 .cardStyle(padding: 18)
 
                 VStack(alignment: .leading, spacing: 14) {
+                    SectionLabel(title: "iCloud Sync", systemImage: "icloud.fill")
+                    HStack {
+                        Text(iCloudStatusLabel)
+                            .font(.sans(16, .bold))
+                            .foregroundStyle(iCloudStatusTint)
+                        Spacer()
+                        Image(systemName: iCloudStatusSymbol)
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(iCloudStatusTint)
+                    }
+                    Text(iCloudStatusDetail)
+                        .font(.sans(12))
+                        .foregroundStyle(Palette.inkSecondary)
+                }
+                .cardStyle(padding: 18)
+
+                VStack(alignment: .leading, spacing: 14) {
                     SectionLabel(title: "About", systemImage: "info.circle.fill")
                     row("Version", "1.0")
                 }
@@ -136,6 +156,77 @@ struct SettingsView: View {
         .background(AppBackground())
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
+        .task { await refreshAccountStatus() }
+        .onReceive(NotificationCenter.default.publisher(for: .CKAccountChanged)) { _ in
+            Task { await refreshAccountStatus() }
+        }
+    }
+
+    // MARK: - iCloud status
+
+    /// UI tests / previews must not touch CloudKit — they render a static Off.
+    private func refreshAccountStatus() async {
+        guard CloudSync.isEnabled else { return }
+        iCloudStatus = try? await CKContainer(identifier: CloudSync.containerID).accountStatus()
+    }
+
+    /// Healthy = the container actually came up CloudKit-backed AND the
+    /// account is reachable. `CloudSync.mode` catches setup failures that
+    /// account status alone would happily report as "available".
+    private var iCloudHealthy: Bool {
+        if case .cloudKit = CloudSync.mode, iCloudStatus == .available { return true }
+        return false
+    }
+
+    private var iCloudStatusLabel: String {
+        switch CloudSync.mode {
+        case .hermetic: return "Off"
+        case .localFallback: return "Error"
+        case .cloudKit:
+            switch iCloudStatus {
+            case .available: return "On"
+            case .noAccount: return "Off"
+            case nil: return "Checking…"
+            default: return "Unavailable"
+            }
+        }
+    }
+
+    private var iCloudStatusSymbol: String {
+        if iCloudHealthy { return "checkmark.icloud.fill" }
+        if case .localFallback = CloudSync.mode { return "exclamationmark.icloud.fill" }
+        return "xmark.icloud"
+    }
+
+    private var iCloudStatusTint: Color {
+        if iCloudHealthy { return Palette.up }
+        if case .localFallback = CloudSync.mode { return Palette.down }
+        return Palette.inkSecondary
+    }
+
+    private var iCloudStatusDetail: String {
+        switch CloudSync.mode {
+        case .hermetic:
+            return "Sync is disabled for test runs."
+        case .localFallback(let reason):
+            return "iCloud sync couldn't start: \(reason) Your data stays on this device."
+        case .cloudKit:
+            switch iCloudStatus {
+            case .available:
+                let monitor = CloudSyncMonitor.shared
+                if let error = monitor.lastError {
+                    return "Last sync problem: \(error)"
+                }
+                if let activity = monitor.lastActivity {
+                    return "Synced privately via your iCloud — last activity \(activity.formatted(.relative(presentation: .named)))."
+                }
+                return "Waiting for the first sync. Keep the app open for a minute; the initial upload covers your whole log."
+            case .noAccount:
+                return "Sign in to iCloud in the Settings app to back up your logs and sync across devices."
+            default:
+                return "iCloud isn't reachable right now. Logging keeps working on this device; sync resumes automatically."
+            }
+        }
     }
 
     /// Brand lockup: the ember mark over the condensed wordmark + tagline.

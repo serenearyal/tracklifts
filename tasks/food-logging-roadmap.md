@@ -231,3 +231,12 @@ pure food app can.
   demoted to a gear pushed from Today. Frees the tab bar for the roadmap: capture sheet + energy
   balance land on Today (Phases 4–5), micros/water/recipes inside Food (Phases 2–3), correlations
   in Progress (Phase 5).
+- _2026-06-10_ — **iCloud sync:** SwiftData store now CloudKit-backed (private DB
+  `iCloud.serene.tracklifts`) so logs survive reinstall + sync across devices; prefs (profile,
+  targets, unit, didOnboard-monotonic) mirror via iCloud KVS; idempotent seed dedup collapses the
+  69-exercise/258-food catalog after cross-device merges; hermetic in-memory store for UI tests /
+  unit-test host / previews; iCloud status card in Settings. **Release-blocking ops:** (1) deploy
+  the CloudKit schema Development → Production in CloudKit Console *before* TestFlight/App Store
+  (TestFlight uses Production), and re-deploy after any future model change (changes must stay
+  additive); (2) requires the paid Apple Developer Program on team M9Q5YCJ5NU — build once in Xcode
+  with automatic signing so the container/capability auto-register.

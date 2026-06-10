@@ -20,8 +20,10 @@ final class WorkoutSession {
     /// date picker, so it can't disambiguate same-day sessions on its own).
     var createdAt: Date = Date()
 
+    // Optional because CloudKit requires every relationship to be optional
+    // (container creation hard-fails otherwise). Read via orderedEntries.
     @Relationship(deleteRule: .cascade, inverse: \LoggedExercise.session)
-    var entries: [LoggedExercise] = []
+    var entries: [LoggedExercise]? = []
 
     init(date: Date = Date(), title: String = "") {
         self.date = date
@@ -30,16 +32,18 @@ final class WorkoutSession {
     }
 
     var orderedEntries: [LoggedExercise] {
-        entries.sorted { $0.order < $1.order }
+        (entries ?? []).sorted { $0.order < $1.order }
     }
+
+    var entryCount: Int { entries?.count ?? 0 }
 
     /// Total volume (reps × weight, summed across every set) for the session.
     var totalVolume: Double {
-        entries.reduce(0) { $0 + $1.totalVolume }
+        (entries ?? []).reduce(0) { $0 + $1.totalVolume }
     }
 
     var totalSets: Int {
-        entries.reduce(0) { $0 + $1.sets.count }
+        (entries ?? []).reduce(0) { $0 + $1.setCount }
     }
 }
 
@@ -49,8 +53,9 @@ final class LoggedExercise {
     var session: WorkoutSession?
     var exercise: Exercise?
 
+    // Optional for CloudKit (see WorkoutSession.entries). Read via orderedSets.
     @Relationship(deleteRule: .cascade, inverse: \LoggedSet.loggedExercise)
-    var sets: [LoggedSet] = []
+    var sets: [LoggedSet]? = []
 
     init(exercise: Exercise, order: Int) {
         self.exercise = exercise
@@ -58,22 +63,24 @@ final class LoggedExercise {
     }
 
     var orderedSets: [LoggedSet] {
-        sets.sorted { $0.order < $1.order }
+        (sets ?? []).sorted { $0.order < $1.order }
     }
 
+    var setCount: Int { sets?.count ?? 0 }
+
     var totalVolume: Double {
-        sets.reduce(0) { $0 + $1.volume }
+        (sets ?? []).reduce(0) { $0 + $1.volume }
     }
 
     /// Heaviest weight lifted across the session's sets for this exercise.
     /// Uses effective load so body-weight lifts count body weight + added.
     var topWeight: Double {
-        sets.map(\.effectiveWeight).max() ?? 0
+        (sets ?? []).map(\.effectiveWeight).max() ?? 0
     }
 
     /// Best estimated one-rep max across the sets (Epley formula).
     var bestEstimatedOneRepMax: Double {
-        sets.map(\.estimatedOneRepMax).max() ?? 0
+        (sets ?? []).map(\.estimatedOneRepMax).max() ?? 0
     }
 }
 

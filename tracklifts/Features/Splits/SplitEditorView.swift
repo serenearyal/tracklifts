@@ -65,7 +65,7 @@ struct SplitEditorView: View {
         .navigationTitle(split.name.isEmpty ? "Split" : split.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if split.days.count > 1 {
+            if split.dayCount > 1 {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { presentReorderDays() } label: {
                         Image(systemName: "arrow.up.arrow.down")
@@ -214,7 +214,7 @@ struct SplitEditorView: View {
     }
 
     private func addDay() {
-        let day = SplitDay(name: "Day \(split.days.count + 1)", order: split.days.count)
+        let day = SplitDay(name: "Day \(split.dayCount + 1)", order: split.dayCount)
         day.split = split
         context.insert(day)
     }
@@ -225,9 +225,9 @@ struct SplitEditorView: View {
     }
 
     private func addExercises(_ exercises: [Exercise], to day: SplitDay) {
-        var order = day.items.count
+        var order = day.itemCount
         for exercise in exercises {
-            if day.items.contains(where: { $0.exercise?.persistentModelID == exercise.persistentModelID }) {
+            if (day.items ?? []).contains(where: { $0.exercise?.persistentModelID == exercise.persistentModelID }) {
                 continue
             }
             let item = SplitItem(exercise: exercise, order: order)

@@ -31,7 +31,7 @@ struct ExerciseProgressView: View {
 
     private var relevantSessions: [WorkoutSession] {
         sessions.filter { session in
-            session.entries.contains { $0.exercise?.persistentModelID == exercise.persistentModelID }
+            (session.entries ?? []).contains { $0.exercise?.persistentModelID == exercise.persistentModelID }
         }
     }
 
