@@ -317,6 +317,10 @@ enum Profile {
         d.set(plan.protein, forKey: NutritionGoals.proteinKey)
         d.set(plan.carbs, forKey: NutritionGoals.carbsKey)
         d.set(plan.fat, forKey: NutritionGoals.fatKey)
+        // Phase 2 — personalized micronutrient targets from the same stats.
+        for n in NutritionGoals.targetable {
+            d.set(NutritionGoals.defaultTarget(n, sex: sex, age: age), forKey: NutritionGoals.key(for: n))
+        }
         try? context.save()
     }
 }

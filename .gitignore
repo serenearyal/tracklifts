@@ -35,3 +35,6 @@ Carthage/Build/
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# USDA FoodData Central raw download (regenerate FoodCatalog.json via tools/usda-import.swift)
+FoodData_Central_*/

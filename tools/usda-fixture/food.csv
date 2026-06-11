@@ -1,0 +1,4 @@
+fdc_id,data_type,description,food_category_id,publication_date
+171077,sr_legacy_food,"Chicken, broilers or fryers, breast, meat only, cooked, roasted",100,2019-04-01
+168462,sr_legacy_food,"Spinach, raw",11,2019-04-01
+999999,branded_food,"Branded Snack, Should Be Skipped, Inc.",100,2020-01-01

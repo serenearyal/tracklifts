@@ -38,8 +38,6 @@ struct FoodDiaryView: View {
     private var dayEntries: [DiaryEntry] {
         allEntries.filter { Calendar.current.isDate($0.date, inSameDayAs: day) }
     }
-    private var total: NutrientVector { DiaryMath.total(dayEntries) }
-
     private func entries(for meal: Meal) -> [DiaryEntry] {
         dayEntries.filter { $0.meal == meal }.sorted { $0.createdAt < $1.createdAt }
     }
@@ -50,12 +48,15 @@ struct FoodDiaryView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        let dayEntries = self.dayEntries
+        let total = DiaryMath.total(dayEntries) // one decode pass per render, shared below
+        return NavigationStack {
             List {
                 Section {
                     dateNav.diaryRow(top: 8, bottom: 2)
                     searchBar.diaryRow(top: 4, bottom: 2)
-                    summaryCard.diaryRow(top: 6, bottom: 2)
+                    summaryCard(total: total).diaryRow(top: 6, bottom: 2)
+                    microLink(total: total).diaryRow(top: 2, bottom: 2)
                     if dayEntries.isEmpty, !previousDayEntries.isEmpty {
                         copyPreviousButton.diaryRow()
                     }
@@ -141,10 +142,9 @@ struct FoodDiaryView: View {
 
     // MARK: - Summary
 
-    private var remaining: Double { goalEnergy - total.energy }
-
-    private var summaryCard: some View {
-        VStack(spacing: 16) {
+    private func summaryCard(total: NutrientVector) -> some View {
+        let remaining = goalEnergy - total.energy
+        return VStack(spacing: 16) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
                     Eyebrow(text: "Energy")
@@ -176,6 +176,33 @@ struct FoodDiaryView: View {
         .cardStyle(padding: 18)
     }
 
+    private func microLink(total: NutrientVector) -> some View {
+        let completeness = Int(Completeness.score(total: total, sex: Profile.sex, age: Profile.age).rounded())
+        return NavigationLink {
+            MicronutrientPanelView(day: day)
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "chart.bar.doc.horizontal.fill")
+                    .font(.system(size: 14, weight: .bold)).foregroundStyle(Palette.ember)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Micronutrients").font(.sans(15, .semibold)).foregroundStyle(Palette.ink)
+                    Text("Vitamins, minerals & more vs. target")
+                        .font(.sans(11)).foregroundStyle(Palette.inkSecondary)
+                }
+                Spacer()
+                VStack(alignment: .trailing, spacing: 0) {
+                    Text("\(completeness)").font(.sans(17, .bold)).foregroundStyle(Palette.ember)
+                        .contentTransition(.numericText())
+                    Text("/ 100").font(.sans(9, .semibold)).foregroundStyle(Palette.inkSecondary)
+                }
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .bold)).foregroundStyle(Palette.inkTertiary)
+            }
+            .cardStyle(padding: 14)
+        }
+        .buttonStyle(.plain)
+    }
+
     private var copyPreviousButton: some View {
         Button { withAnimation(.snappy) { copyPreviousDay() } } label: {
             HStack(spacing: 8) {
@@ -199,6 +226,7 @@ struct FoodDiaryView: View {
                                       grams: entry.grams, portionLabel: entry.portionLabel))
         }
         try? context.save()
+        HealthKitManager.shared.syncDay(day, context: context)
     }
 
     // MARK: - Meal section
@@ -215,7 +243,9 @@ struct FoodDiaryView: View {
                         .diaryRow(top: 4, bottom: 4)
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button(role: .destructive) {
+                                let d = entry.date
                                 context.delete(entry); try? context.save()
+                                HealthKitManager.shared.syncDay(d, context: context)
                             } label: { Label("Delete", systemImage: "trash") }
                         }
                 }
@@ -350,6 +380,8 @@ struct EditDiaryEntrySheet: View {
                     }
                     .cardStyle(padding: 16)
 
+                    NutritionFactsView(nutrients: preview)
+
                     VStack(alignment: .leading, spacing: 10) {
                         SectionLabel(title: "Meal", systemImage: "calendar")
                         Picker("Meal", selection: $meal) {
@@ -394,12 +426,15 @@ struct EditDiaryEntrySheet: View {
         guard grams > 0 else { return }
         entry.restate(grams: grams, meal: meal)
         try? context.save()
+        HealthKitManager.shared.syncDay(entry.date, context: context)
         dismiss()
     }
 
     private func delete() {
+        let d = entry.date
         context.delete(entry)
         try? context.save()
+        HealthKitManager.shared.syncDay(d, context: context)
         dismiss()
     }
 }

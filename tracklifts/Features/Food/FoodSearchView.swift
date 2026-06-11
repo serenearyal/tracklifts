@@ -15,19 +15,55 @@ struct FoodSearchView: View {
     let day: Date
 
     @Environment(\.dismiss) private var dismiss
-    @Query(sort: \FoodItem.name) private var foods: [FoodItem]
+    @Environment(\.modelContext) private var context
     @Query(sort: \DiaryEntry.createdAt, order: .reverse) private var recentEntries: [DiaryEntry]
     @State private var searchText = ""
+    @State private var results: [FoodItem] = []
+    @State private var searching = false
+    @State private var searchTask: Task<Void, Never>?
     @FocusState private var searchFocused: Bool
 
-    private var filtered: [FoodItem] {
-        let base = searchText.isEmpty ? foods : foods.filter {
-            $0.name.localizedCaseInsensitiveContains(searchText)
-            || $0.brand.localizedCaseInsensitiveContains(searchText)
+    /// Filtering runs in SQLite (predicate + `fetchLimit`), not by loading the
+    /// whole catalog into memory — at thousands of foods, scanning every row in
+    /// Swift on each keystroke janks the main thread. Keystrokes are debounced;
+    /// relevance ranking (name-prefix > word-prefix > anywhere, favorites first)
+    /// is applied only to the capped result set, so "kiwi" still surfaces
+    /// "Kiwifruit, raw" above "Beverages, … Kiwi".
+    private func scheduleSearch(_ raw: String) {
+        searchTask?.cancel()
+        let term = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !term.isEmpty else { results = []; searching = false; return }
+        searching = true
+        searchTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(220))
+            guard !Task.isCancelled else { return }
+            search(term)
+            searching = false
         }
-        return base.sorted {
-            ($0.isFavorite ? 0 : 1, $0.name) < ($1.isFavorite ? 0 : 1, $1.name)
+    }
+
+    @MainActor private func search(_ term: String) {
+        var descriptor = FetchDescriptor<FoodItem>(
+            predicate: #Predicate {
+                $0.name.localizedStandardContains(term) || $0.brand.localizedStandardContains(term)
+            },
+            sortBy: [SortDescriptor(\.name)]) // favorites-first is applied in the in-memory rank below
+        descriptor.fetchLimit = 60
+        let fetched = (try? context.fetch(descriptor)) ?? []
+        results = fetched.sorted {
+            ($0.isFavorite ? 0 : 1, Self.matchRank($0.name, query: term), $0.name)
+                < ($1.isFavorite ? 0 : 1, Self.matchRank($1.name, query: term), $1.name)
         }
+    }
+
+    /// 0 = name starts with the query, 1 = some word starts with it, 2 = matches elsewhere.
+    private static func matchRank(_ name: String, query: String) -> Int {
+        let lname = name.lowercased(), lq = query.lowercased()
+        if lname.hasPrefix(lq) { return 0 }
+        if lname.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).contains(where: { $0.hasPrefix(lq) }) {
+            return 1
+        }
+        return 2
     }
 
     /// Most-recently-logged distinct foods — a quick re-log shortcut.
@@ -48,17 +84,23 @@ struct FoodSearchView: View {
                 searchField
                 ScrollView {
                     LazyVStack(spacing: 10) {
-                        if searchText.isEmpty && !recentFoods.isEmpty {
-                            sectionHeader("Recent")
-                            ForEach(recentFoods) { food in foodLink(food) }
-                            sectionHeader("All foods")
+                        if searchText.isEmpty {
+                            if !recentFoods.isEmpty {
+                                sectionHeader("Recent")
+                                ForEach(recentFoods) { food in foodLink(food) }
+                            } else {
+                                Text("Search to add a food")
+                                    .font(.sans(15)).foregroundStyle(Palette.inkSecondary)
+                                    .frame(maxWidth: .infinity).padding(.top, 50)
+                            }
+                        } else {
+                            if results.isEmpty && !searching {
+                                Text("No matches for “\(searchText)”")
+                                    .font(.sans(15)).foregroundStyle(Palette.inkSecondary)
+                                    .frame(maxWidth: .infinity).padding(.top, 50)
+                            }
+                            ForEach(results) { food in foodLink(food) }
                         }
-                        if filtered.isEmpty {
-                            Text(foods.isEmpty ? "Loading foods…" : "No matches for “\(searchText)”")
-                                .font(.sans(15)).foregroundStyle(Palette.inkSecondary)
-                                .frame(maxWidth: .infinity).padding(.top, 50)
-                        }
-                        ForEach(filtered) { food in foodLink(food) }
                     }
                     .padding(.horizontal, 20)
                     .padding(.bottom, 24)
@@ -75,6 +117,7 @@ struct FoodSearchView: View {
                 }
             }
             .onAppear { searchFocused = true }
+            .onChange(of: searchText) { _, newValue in scheduleSearch(newValue) }
         }
     }
 
@@ -139,8 +182,10 @@ struct FoodSearchView: View {
 struct FoodRow: View {
     let food: FoodItem
 
+    /// Energy from the promoted `kcalPer100g` column — avoids JSON-decoding the
+    /// full nutrient blob just to show one number per row.
     private var servingKcal: Int {
-        Int(food.nutrients(forGrams: food.defaultPortion.grams).energy.rounded())
+        Int((food.kcalPer100g * food.defaultPortion.grams / 100).rounded())
     }
 
     var body: some View {
@@ -261,6 +306,8 @@ struct LogFoodView: View {
                 }
                 .cardStyle(padding: 16)
 
+                NutritionFactsView(nutrients: nutrients)
+
                 VStack(alignment: .leading, spacing: 10) {
                     SectionLabel(title: "Meal", systemImage: "calendar")
                     Picker("Meal", selection: $meal) {
@@ -294,6 +341,7 @@ struct LogFoodView: View {
         let entry = DiaryEntry(date: day, meal: meal, food: food, grams: grams, portionLabel: label)
         context.insert(entry)
         try? context.save()
-        onLogged()
+        onLogged()                                             // dismiss first — keep "Add" instant
+        HealthKitManager.shared.syncDay(day, context: context) // best-effort mirror, deferred internally
     }
 }

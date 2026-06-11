@@ -23,6 +23,8 @@ final class FoodItem {
     var isCustom: Bool = false
     var isFavorite: Bool = false
     var createdAt: Date = Date()
+    /// USDA FoodData Central id (0 = custom / no source). Stable identity for dedup + re-log.
+    var fdcId: Int = 0
 
     // Optional because CloudKit requires every relationship to be optional.
     @Relationship(deleteRule: .cascade, inverse: \FoodPortion.food)
@@ -34,7 +36,7 @@ final class FoodItem {
     var diaryEntries: [DiaryEntry]? = []
 
     init(name: String, brand: String = "", source: FoodSource = .seed,
-         per100g: NutrientVector, barcode: String = "", isCustom: Bool = false) {
+         per100g: NutrientVector, barcode: String = "", isCustom: Bool = false, fdcId: Int = 0) {
         self.name = name
         self.brand = brand
         self.sourceRaw = source.rawValue
@@ -42,6 +44,7 @@ final class FoodItem {
         self.nutrientData = per100g.encoded()
         self.kcalPer100g = per100g.energy
         self.isCustom = isCustom
+        self.fdcId = fdcId
         self.createdAt = Date()
     }
 
@@ -95,6 +98,8 @@ final class DiaryEntry {
     var nutrientData: Data = Data()
     var order: Int = 0
     var createdAt: Date = Date()
+    /// USDA FoodData Central id snapshotted from the source food (0 = custom).
+    var fdcId: Int = 0
     /// Reference to the source food. Nullified (not cascaded) when the food is
     /// deleted — the rule lives on the inverse, `FoodItem.diaryEntries`.
     var food: FoodItem?
@@ -110,6 +115,7 @@ final class DiaryEntry {
         self.nutrientData = scaled.encoded()
         self.kcal = scaled.energy
         self.food = food
+        self.fdcId = food.fdcId
         self.order = order
         self.createdAt = Date()
     }
@@ -166,4 +172,21 @@ enum NutritionGoals {
     static let defaultProtein: Double = 150
     static let defaultCarbs: Double = 220
     static let defaultFat: Double = 65
+
+    // MARK: Phase 2 — per-nutrient micronutrient targets
+
+    /// UserDefaults key for a nutrient's daily target — distinct from the macro
+    /// keys above. Read via `@AppStorage`; mirrored through iCloud.
+    static func key(for n: Nutrient) -> String { "goal_" + n.rawValue }
+
+    /// Auto target for a nutrient given the user's stats — the DRI for adequacy
+    /// nutrients, the recommended limit for "stay-under" nutrients, else 0.
+    static func defaultTarget(_ n: Nutrient, sex: Sex, age: Int) -> Double {
+        n.target(sex: sex, age: age) ?? 0
+    }
+
+    /// Nutrients that receive a personalized target (vitamins, minerals, key
+    /// fats, fiber) — drives onboarding writes, the iCloud mirror, and the editor.
+    static let targetable: [Nutrient] =
+        Nutrient.allCases.filter { $0.target(sex: .male, age: 30) != nil }
 }

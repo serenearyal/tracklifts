@@ -58,6 +58,7 @@ struct RootView: View {
             // (or a pre-reinstall) store into this one. Seeding above stays
             // first so offline fresh installs still get a full library.
             CloudDedup.start(context: context)
+            HealthKitManager.shared.syncOnLaunch(context: context)
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { CloudDedup.runIfDue(context) }

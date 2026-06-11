@@ -8,10 +8,13 @@ photo / voice / barcode as convenience layers on top.
 and a **Done when** bar. Don't start a phase until the one above it meets its "Done when."
 Check items off as you go; the next unchecked phase is always what to do next.
 
-**Status:** ✅ **Phase 0 + Phase 1 engine shipped** (body-weight log; food search → log → diary →
-goals; build green, 258-food catalog). **Next: Phase 2** — micronutrient panel, auto targets/DRI,
-completeness score, HealthKit. Remaining Phase 1 polish: custom foods, true FTS, full USDA import — favorite toggle, tap-to-edit,
-and recents are now done.
+**Status:** ✅ **Phase 0 + Phase 1 + Phase 2 machinery shipped** (body-weight log; food search → log →
+diary → goals; ~30-nutrient registry + DRI targets + micronutrient panel + completeness score + nutrient
+trends + HealthKit; build green, logic tests pass). **Phase 2 data loaded:** `Resources/FoodCatalog.json`
+generated from the **full USDA SR-Legacy (7,756 foods, ~32-nutrient panels)** and verified seeding on the
+sim (7,756 `FoodItem`s, micros present); a **Nutrition Facts** breakdown now shows in the log + edit
+sheets (not just macros). _Commit the 7.3 MB JSON to ship it; the raw FDC CSVs are gitignored._
+**Next: Phase 3** (barcode, custom foods, recipes, water). Remaining Phase 1 polish: custom foods, true FTS.
 
 ---
 
@@ -137,15 +140,19 @@ schema + RootView (new **Food** tab) + Settings goals. Build green (iPhone 17 Pr
 **Goal:** the micronutrient depth + automated targets that make it competitive.
 
 **Build**
-- [ ] Full **micronutrient panel** screen (vitamins, minerals, fats, etc.) with % of target.
-- [ ] `NutrientTarget` auto-set from age/sex/weight (DRI/RDA); manual override.
-- [ ] **Completeness score** (Cronometer's signature daily "how complete was your nutrition").
-- [ ] Nutrient **charts over time** (Swift Charts), reusing Progress patterns.
-- [ ] **HealthKit:** read body mass + active energy; write dietary energy + macros. Entitlement +
-      permission flow + App Review notes.
+- [x] Full **micronutrient panel** screen (vitamins, minerals, fats) with % of target (`MicronutrientPanelView`).
+- [x] Auto-set targets from age/sex/weight (DRI/RDA, `NutrientReference.swift`); manual override (`MicronutrientTargetsView`).
+- [x] **Completeness score** (`Completeness.swift`) — capped adequacy − bounded stay-under penalty.
+- [x] Nutrient **charts over time** (`NutrientTrendView`, Swift Charts), cloning the BodyWeight chart.
+- [x] **HealthKit** (`HealthKitManager`): read body mass + active energy; write dietary energy + macros.
+      Entitlement + usage strings + permission flow done; loop-safe (disjoint read/write sets).
+- [x] _Data:_ `FoodCatalog.json` from full SR-Legacy (7,756 foods, full panel); verified seeding on sim (7,756 FoodItems).
+- [x] _UI:_ Nutrition Facts (vitamins/minerals/fats + %DV) in the log + edit sheets.
+- [ ] _Device:_ verify HealthKit real reads + capability provisioning on hardware.
 
 **Done when:** every logged day shows a full nutrient breakdown vs. personalized targets, and data
-flows to/from Health. _Unlocks:_ credibility + the TDEE math in Phase 5.
+flows to/from Health. _Unlocks:_ credibility + the TDEE math in Phase 5. **Status: code complete + green;
+awaiting the USDA data import (offline, user-run) + a device pass for HealthKit.**
 
 ---
 
@@ -231,6 +238,15 @@ pure food app can.
   demoted to a gear pushed from Today. Frees the tab bar for the roadmap: capture sheet + energy
   balance land on Today (Phases 4–5), micros/water/recipes inside Food (Phases 2–3), correlations
   in Progress (Phase 5).
+- _2026-06-10_ — **Phase 2 shipped (machinery, data-gated):** ~30-nutrient registry + published DRI/RDA
+  table by sex/age (`NutrientReference.swift`); USDA FoodData Central importer (`tools/usda-import.swift`)
+  → `Resources/FoodCatalog.json`, consumed by `FoodSeedManager` (falls back to the 258 Swift seed);
+  `fdcId` identity + dedup; DRI auto-targets (onboarding/Recalculate, CloudPrefs-mirrored, editable);
+  micronutrient panel; completeness score; nutrient trend charts; HealthKit (read body mass, write
+  dietary energy/macros, loop-safe). **Architecture: Option B** (USDA seeded into SwiftData, not a
+  bundled SQLite/FTS engine — keeps the Phase-1 food surface intact). Build green every slice; new
+  DRI/completeness logic tests pass. _Open:_ user runs the importer on the FDC download to populate real
+  micros; HealthKit real-data + capability provisioning need a device.
 - _2026-06-10_ — **iCloud sync:** SwiftData store now CloudKit-backed (private DB
   `iCloud.serene.tracklifts`) so logs survive reinstall + sync across devices; prefs (profile,
   targets, unit, didOnboard-monotonic) mirror via iCloud KVS; idempotent seed dedup collapses the

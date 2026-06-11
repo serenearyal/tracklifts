@@ -9,9 +9,20 @@
 
 import Foundation
 
-/// The nutrients we track. Phase 1 surfaces energy + macros.
+/// The nutrients we track. Phase 1 surfaced energy + macros; Phase 2 adds the
+/// micronutrient panel (vitamins, minerals, fats). `rawValue`s are permanent —
+/// they are the persisted JSON keys in every `NutrientVector`.
 enum Nutrient: String, CaseIterable, Identifiable {
+    // Macros (Phase 1)
     case energy, protein, carbs, fat, fiber, sugar, satFat, sodium
+    // Fats & cholesterol (Phase 2)
+    case monoFat, polyFat, transFat, cholesterol
+    // Vitamins (Phase 2)
+    case vitaminA, vitaminC, vitaminD, vitaminE, vitaminK
+    case thiamin, riboflavin, niacin, vitaminB6, folate, vitaminB12
+    // Minerals (Phase 2)
+    case calcium, iron, magnesium, phosphorus, potassium
+    case zinc, copper, selenium, manganese
 
     var id: String { rawValue }
 
@@ -25,15 +36,41 @@ enum Nutrient: String, CaseIterable, Identifiable {
         case .sugar: "Sugar"
         case .satFat: "Sat. Fat"
         case .sodium: "Sodium"
+        case .monoFat: "Monounsaturated"
+        case .polyFat: "Polyunsaturated"
+        case .transFat: "Trans Fat"
+        case .cholesterol: "Cholesterol"
+        case .vitaminA: "Vitamin A"
+        case .vitaminC: "Vitamin C"
+        case .vitaminD: "Vitamin D"
+        case .vitaminE: "Vitamin E"
+        case .vitaminK: "Vitamin K"
+        case .thiamin: "Thiamin (B1)"
+        case .riboflavin: "Riboflavin (B2)"
+        case .niacin: "Niacin (B3)"
+        case .vitaminB6: "Vitamin B6"
+        case .folate: "Folate"
+        case .vitaminB12: "Vitamin B12"
+        case .calcium: "Calcium"
+        case .iron: "Iron"
+        case .magnesium: "Magnesium"
+        case .phosphorus: "Phosphorus"
+        case .potassium: "Potassium"
+        case .zinc: "Zinc"
+        case .copper: "Copper"
+        case .selenium: "Selenium"
+        case .manganese: "Manganese"
         }
     }
 
-    /// Display unit: kcal for energy, mg for sodium, grams for everything else.
+    /// Display unit: kcal, grams, milligrams, or micrograms ("mcg").
     var unit: String {
         switch self {
         case .energy: "kcal"
-        case .sodium: "mg"
-        default: "g"
+        case .protein, .carbs, .fat, .fiber, .sugar,
+             .satFat, .monoFat, .polyFat, .transFat: "g"
+        case .vitaminA, .vitaminD, .vitaminK, .folate, .vitaminB12, .selenium: "mcg"
+        default: "mg" // sodium, cholesterol, vitamin C/E, B-vitamins, minerals
         }
     }
 
@@ -82,9 +119,13 @@ struct NutrientVector: Codable, Equatable {
         return NutrientVector(out)
     }
 
-    func encoded() -> Data { (try? JSONEncoder().encode(self)) ?? Data() }
+    // Reused instead of allocating a coder per call — diary totals decode one
+    // blob per entry, and seeding encodes ~7,700. Used serially on the main actor.
+    private static let encoder = JSONEncoder()
+    private static let decoder = JSONDecoder()
+    func encoded() -> Data { (try? Self.encoder.encode(self)) ?? Data() }
     static func decode(_ data: Data) -> NutrientVector {
-        (try? JSONDecoder().decode(NutrientVector.self, from: data)) ?? NutrientVector()
+        (try? decoder.decode(NutrientVector.self, from: data)) ?? NutrientVector()
     }
 }
 

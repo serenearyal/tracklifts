@@ -26,7 +26,7 @@ final class CloudPrefs {
         NutritionGoals.energyKey, NutritionGoals.proteinKey,
         NutritionGoals.carbsKey, NutritionGoals.fatKey,
         "weightUnit",
-    ]
+    ] + NutritionGoals.targetable.map(NutritionGoals.key(for:)) // + per-nutrient targets
 
     private let defaults: UserDefaults
     private let store: NSUbiquitousKeyValueStore

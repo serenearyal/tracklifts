@@ -139,6 +139,112 @@ struct CloudDedupTests {
         #expect(afterFirst == 1)
         #expect(afterSecond == 1)
     }
+
+    // MARK: - Legacy curated purge (single-source USDA)
+
+    @Test func purgeRemovesLegacyCuratedKeepsDiaryAndCustoms() throws {
+        let context = try makeContext()
+
+        // A Phase-1 curated ghost: seed-origin, macros only, no USDA id.
+        let ghost = FoodItem(name: "Kiwi", source: .seed,
+                             per100g: NutrientVector(energy: 61, protein: 1.1, carbs: 14.7, fat: 0.5),
+                             fdcId: 0)
+        context.insert(ghost)
+        let portion = FoodPortion(label: "1 medium (69 g)", grams: 69, order: 0)
+        context.insert(portion)
+        portion.food = ghost
+
+        // A logged entry on the ghost — its history must outlive the food.
+        let entry = DiaryEntry(date: .now, meal: .breakfast, food: ghost, grams: 69)
+        context.insert(entry)
+
+        // The USDA twin (fdcId != 0) and a user custom (.custom) must be untouched.
+        let usda = FoodItem(name: "Kiwifruit, green, raw", source: .seed,
+                            per100g: NutrientVector(energy: 61, protein: 1.1, carbs: 15, fat: 0.5),
+                            fdcId: 168153)
+        context.insert(usda)
+        let custom = FoodItem(name: "My Protein Shake", source: .custom,
+                              per100g: NutrientVector(energy: 120, protein: 25, carbs: 3, fat: 1),
+                              isCustom: true)
+        context.insert(custom)
+        try context.save()
+        let kcalBefore = entry.kcal
+
+        CloudDedup.purgeLegacyCurated(context)
+        try context.save()
+
+        let names = Set(try context.fetch(FetchDescriptor<FoodItem>()).map(\.name))
+        #expect(!names.contains("Kiwi"), "the macros-only curated ghost is purged")
+        #expect(names.contains("Kiwifruit, green, raw"), "USDA foods (fdcId != 0) survive")
+        #expect(names.contains("My Protein Shake"), "user customs (.custom) survive")
+
+        // Diary history is immutable: the entry keeps its snapshot; food nullified.
+        let entries = try context.fetch(FetchDescriptor<DiaryEntry>())
+        #expect(entries.count == 1)
+        #expect(entries.first?.food == nil, "deleting the source food nullifies the back-ref")
+        #expect(entries.first?.kcal == kcalBefore, "the logged nutrient snapshot is preserved")
+
+        // The ghost's portions cascade away with it.
+        let lingering = try context.fetch(FetchDescriptor<FoodPortion>())
+            .filter { $0.label == "1 medium (69 g)" }
+        #expect(lingering.isEmpty, "the ghost's portions cascade on delete")
+    }
+
+    @Test func purgeIsIdempotent() throws {
+        let context = try makeContext()
+        let ghost = FoodItem(name: "Banana", source: .seed,
+                             per100g: NutrientVector(energy: 89, protein: 1.1, carbs: 23, fat: 0.3),
+                             fdcId: 0)
+        context.insert(ghost)
+        try context.save()
+
+        CloudDedup.purgeLegacyCurated(context)
+        try context.save()
+        let afterFirst = try context.fetch(FetchDescriptor<FoodItem>()).count
+
+        CloudDedup.purgeLegacyCurated(context)
+        try context.save()
+        let afterSecond = try context.fetch(FetchDescriptor<FoodItem>()).count
+
+        #expect(afterFirst == 0)
+        #expect(afterSecond == 0)
+    }
+
+    // MARK: - Food search predicate (SQLite pushdown)
+
+    /// Mirrors `FoodSearchView.search(_:)` — proves `localizedStandardContains`
+    /// translates to a real SwiftData/SQLite fetch (case-insensitive substring on
+    /// name + brand), so the catalog is filtered in the store, not in Swift.
+    @Test func foodSearchPredicateMatchesNameAndBrandCaseInsensitively() throws {
+        let context = try makeContext()
+        var nextId = 1
+        @discardableResult func food(_ name: String, brand: String = "") -> FoodItem {
+            defer { nextId += 1 }
+            let f = FoodItem(name: name, brand: brand, source: .seed,
+                             per100g: NutrientVector(energy: 50), fdcId: nextId)
+            context.insert(f); return f
+        }
+        food("Kiwifruit, green, raw")
+        food("Spinach, raw")
+        food("Chicken, broilers or fryers, breast")
+        food("Greek Yogurt", brand: "Fage")
+        try context.save()
+
+        func runSearch(_ term: String) -> [FoodItem] {
+            var d = FetchDescriptor<FoodItem>(
+                predicate: #Predicate { $0.name.localizedStandardContains(term)
+                                     || $0.brand.localizedStandardContains(term) },
+                sortBy: [SortDescriptor(\.name)])
+            d.fetchLimit = 60
+            return (try? context.fetch(d)) ?? []
+        }
+
+        #expect(runSearch("kiwi").map(\.name) == ["Kiwifruit, green, raw"])
+        #expect(runSearch("KIWI").map(\.name) == ["Kiwifruit, green, raw"], "case-insensitive")
+        #expect(runSearch("chicken").contains { $0.name.contains("Chicken") })
+        #expect(runSearch("fage").map(\.name) == ["Greek Yogurt"], "matches brand too")
+        #expect(runSearch("zzzznope").isEmpty, "no false matches")
+    }
 }
 
 // MARK: - CloudPrefs

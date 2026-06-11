@@ -19,6 +19,8 @@ struct SettingsView: View {
     @AppStorage(Profile.goalKey) private var goalRaw = FitnessGoal.maintain.rawValue
     @AppStorage(Profile.didOnboardKey) private var didOnboard = false
 
+    @Environment(\.modelContext) private var context
+    @ObservedObject private var health = HealthKitManager.shared
     @State private var iCloudStatus: CKAccountStatus?
     @FocusState private var focusedGoal: GoalField?
 
@@ -54,6 +56,33 @@ struct SettingsView: View {
                         .foregroundStyle(Palette.inkSecondary)
                 }
                 .cardStyle(padding: 18)
+
+                if health.isAvailable {
+                    VStack(alignment: .leading, spacing: 14) {
+                        SectionLabel(title: "Apple Health", systemImage: "heart.fill")
+                        HStack {
+                            Text(health.isAuthorized ? "Connected" : "Not connected")
+                                .font(.sans(16, .bold))
+                                .foregroundStyle(health.isAuthorized ? Palette.up : Palette.inkSecondary)
+                            Spacer()
+                            if health.isAuthorized {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 16, weight: .bold)).foregroundStyle(Palette.up)
+                            } else {
+                                Button { connectHealth() } label: {
+                                    Text("Connect")
+                                        .font(.sans(13, .bold)).foregroundStyle(Palette.ember)
+                                        .padding(.horizontal, 12).padding(.vertical, 8)
+                                        .background(Palette.ember.opacity(0.14), in: .capsule)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        Text("Reads your body weight & active energy, and writes the calories and macros you log back to Apple Health.")
+                            .font(.sans(12)).foregroundStyle(Palette.inkSecondary)
+                    }
+                    .cardStyle(padding: 18)
+                }
 
                 VStack(alignment: .leading, spacing: 14) {
                     SectionLabel(title: "Units", systemImage: "scalemass.fill")
@@ -127,6 +156,20 @@ struct SettingsView: View {
                     goalRow("Protein", value: $goalProtein, unit: "g", focus: .protein)
                     goalRow("Carbs", value: $goalCarbs, unit: "g", focus: .carbs)
                     goalRow("Fat", value: $goalFat, unit: "g", focus: .fat)
+                    Rectangle().fill(Palette.hairline).frame(height: 1)
+                    NavigationLink {
+                        MicronutrientTargetsView()
+                    } label: {
+                        HStack {
+                            Text("Vitamins, minerals & more")
+                                .font(.sans(15, .semibold)).foregroundStyle(Palette.ink)
+                            Spacer()
+                            Text("Targets").font(.sans(12, .bold)).tracking(1).foregroundStyle(Palette.ember)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 12, weight: .bold)).foregroundStyle(Palette.inkTertiary)
+                        }
+                    }
+                    .buttonStyle(.plain)
                     Text("Set from your goal during setup. Recalculate to redo it, or fine-tune any value.")
                         .font(.sans(12))
                         .foregroundStyle(Palette.inkSecondary)
@@ -180,6 +223,15 @@ struct SettingsView: View {
     private func refreshAccountStatus() async {
         guard CloudSync.isEnabled else { return }
         iCloudStatus = try? await CKContainer(identifier: CloudSync.containerID).accountStatus()
+    }
+
+    /// Request Health permission, then pull the latest weigh-in + write today.
+    private func connectHealth() {
+        Task {
+            await health.requestAuthorization()
+            health.importLatestBodyMass(context: context)
+            health.syncDay(.now, context: context)
+        }
     }
 
     /// Healthy = the container actually came up CloudKit-backed AND the

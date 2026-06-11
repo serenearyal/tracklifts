@@ -22,6 +22,7 @@ struct SeedFood {
     let satFat: Double
     let sodium: Double     // mg / 100 g
     let portions: [SeedPortion]
+    var fdcId: Int = 0
 
     var per100g: NutrientVector {
         NutrientVector(energy: kcal, protein: protein, carbs: carbs, fat: fat,
