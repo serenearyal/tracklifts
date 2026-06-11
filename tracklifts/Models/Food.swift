@@ -35,6 +35,19 @@ final class FoodItem {
     @Relationship(deleteRule: .nullify, inverse: \DiaryEntry.food)
     var diaryEntries: [DiaryEntry]? = []
 
+    // CloudKit-required inverse of SavedMealItem.food. Deleting a food nullifies
+    // the saved-meal item's reference; logging that meal then skips the item.
+    @Relationship(deleteRule: .nullify, inverse: \SavedMealItem.food)
+    var savedMealItems: [SavedMealItem]? = []
+
+    // CloudKit-required inverse of RecipeIngredient.food (nullify on delete).
+    @Relationship(deleteRule: .nullify, inverse: \RecipeIngredient.food)
+    var recipeIngredients: [RecipeIngredient]? = []
+
+    // When this food is the per-serving food derived from a Recipe, its owner.
+    // The cascade rule lives on `Recipe.food`; this is the plain inverse side.
+    var recipe: Recipe?
+
     init(name: String, brand: String = "", source: FoodSource = .seed,
          per100g: NutrientVector, barcode: String = "", isCustom: Bool = false, fdcId: Int = 0) {
         self.name = name

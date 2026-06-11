@@ -16,6 +16,8 @@ struct SettingsView: View {
     @AppStorage(NutritionGoals.proteinKey) private var goalProtein = NutritionGoals.defaultProtein
     @AppStorage(NutritionGoals.carbsKey) private var goalCarbs = NutritionGoals.defaultCarbs
     @AppStorage(NutritionGoals.fatKey) private var goalFat = NutritionGoals.defaultFat
+    @AppStorage(WaterGoals.goalKey) private var goalWaterMl = WaterGoals.defaultGoalMl
+    @AppStorage(WaterGoals.unitKey) private var waterUnitRaw = WaterUnit.ml.rawValue
     @AppStorage(Profile.goalKey) private var goalRaw = FitnessGoal.maintain.rawValue
     @AppStorage(Profile.didOnboardKey) private var didOnboard = false
 
@@ -24,7 +26,7 @@ struct SettingsView: View {
     @State private var iCloudStatus: CKAccountStatus?
     @FocusState private var focusedGoal: GoalField?
 
-    private enum GoalField: Hashable { case energy, protein, carbs, fat }
+    private enum GoalField: Hashable { case energy, protein, carbs, fat, water }
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -156,6 +158,7 @@ struct SettingsView: View {
                     goalRow("Protein", value: $goalProtein, unit: "g", focus: .protein)
                     goalRow("Carbs", value: $goalCarbs, unit: "g", focus: .carbs)
                     goalRow("Fat", value: $goalFat, unit: "g", focus: .fat)
+                    waterGoalRow
                     Rectangle().fill(Palette.hairline).frame(height: 1)
                     NavigationLink {
                         MicronutrientTargetsView()
@@ -340,5 +343,42 @@ struct SettingsView: View {
                 .frame(width: 34, alignment: .leading)
         }
         .id(focus)
+    }
+
+    private var waterUnit: WaterUnit { WaterUnit(rawValue: waterUnitRaw) ?? .ml }
+
+    /// Edits the goal in the chosen display unit; storage stays milliliters.
+    private var waterGoalInUnit: Binding<Double> {
+        Binding(get: { goalWaterMl / waterUnit.milliliters },
+                set: { goalWaterMl = max(0, $0 * waterUnit.milliliters) })
+    }
+
+    /// Like `goalRow`, but the unit is a tappable menu (ml / oz / cups).
+    private var waterGoalRow: some View {
+        HStack {
+            Text("Water").font(.sans(15)).foregroundStyle(Palette.ink)
+            Spacer()
+            TextField("0", value: waterGoalInUnit, format: .number)
+                .keyboardType(.decimalPad)
+                .focused($focusedGoal, equals: .water)
+                .multilineTextAlignment(.trailing)
+                .font(.sans(16, .bold)).foregroundStyle(Palette.ink)
+                .frame(width: 72)
+                .padding(.vertical, 6).padding(.horizontal, 10)
+                .background(Palette.surfaceRaised, in: .rect(cornerRadius: 10))
+            Menu {
+                ForEach(WaterUnit.allCases) { u in
+                    Button(u.label) { waterUnitRaw = u.rawValue }
+                }
+            } label: {
+                HStack(spacing: 3) {
+                    Text(waterUnit.label).font(.sans(12, .semibold)).foregroundStyle(Palette.ember)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 9, weight: .bold)).foregroundStyle(Palette.ember)
+                }
+                .frame(width: 50, alignment: .leading)
+            }
+        }
+        .id(GoalField.water)
     }
 }

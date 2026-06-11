@@ -25,6 +25,7 @@ final class CloudPrefs {
         Profile.goalKey, Profile.paceKey, Profile.customRateKey, Profile.targetWeightKey,
         NutritionGoals.energyKey, NutritionGoals.proteinKey,
         NutritionGoals.carbsKey, NutritionGoals.fatKey,
+        WaterGoals.goalKey, WaterGoals.unitKey,
         "weightUnit",
     ] + NutritionGoals.targetable.map(NutritionGoals.key(for:)) // + per-nutrient targets
 

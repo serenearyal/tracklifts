@@ -149,7 +149,24 @@ struct NutrientVector: Codable, Equatable {
 }
 
 /// Where a food came from.
-enum FoodSource: String, Codable { case seed, custom, openFoodFacts }
+enum FoodSource: String, Codable { case seed, custom, openFoodFacts, recipe }
+
+/// Pure recipe aggregation: ingredient (per-100 g vector, grams) pairs → the
+/// derived food's per-100 g vector + one-serving gram weight. Reuses
+/// `NutrientVector` `+`/`scaled(by:)` so micros aggregate, not just macros.
+/// Logging one serving then yields exactly (total nutrients ÷ servings).
+enum RecipeMath {
+    static func aggregate(_ ingredients: [(per100g: NutrientVector, grams: Double)],
+                          servings: Double) -> (per100g: NutrientVector, servingGrams: Double) {
+        let totalGrams = ingredients.reduce(0) { $0 + $1.grams }
+        guard totalGrams > 0 else { return (NutrientVector([:]), 0) }
+        let total = ingredients.reduce(NutrientVector([:])) { acc, ing in
+            acc + ing.per100g.scaled(by: ing.grams / 100)
+        }
+        let safeServings = servings > 0 ? servings : 1
+        return (total.scaled(by: 100 / totalGrams), totalGrams / safeServings)
+    }
+}
 
 /// Meal sections in the daily diary.
 enum Meal: String, CaseIterable, Identifiable, Codable {

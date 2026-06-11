@@ -14,8 +14,9 @@ trends + HealthKit; build green, logic tests pass). **Phase 2 data loaded:** `Re
 generated from the **full USDA SR-Legacy (7,756 foods, ~32-nutrient panels)** and verified seeding on the
 sim (7,756 `FoodItem`s, micros present); a **Nutrition Facts** breakdown now shows in the log + edit
 sheets (not just macros). _Commit the 7.3 MB JSON to ship it; the raw FDC CSVs are gitignored._
-**Phase 3 in progress:** ✅ custom foods, ✅ barcode scan + Open Food Facts (barcode lookup + online branded
-search, local cache, ODbL). **Next: recipes, meals, water.** Remaining Phase 1 polish: true FTS.
+**Phase 3 shipped:** ✅ custom foods, ✅ barcode scan + Open Food Facts (lookup + online branded search, cache,
+ODbL), ✅ recipes, ✅ saved meals, ✅ water. **Next: Phase 4 — capture magic (voice → photo).** Remaining
+Phase 1 polish: true FTS.
 
 ---
 
@@ -157,7 +158,7 @@ awaiting the USDA data import (offline, user-run) + a device pass for HealthKit.
 
 ---
 
-## Phase 3 — Breadth: barcode, custom foods, recipes, water  🟦 (in progress)
+## Phase 3 — Breadth: barcode, custom foods, recipes, water  ✅
 
 **Goal:** cover the long tail so users aren't blocked by a missing food.
 
@@ -166,11 +167,12 @@ awaiting the USDA data import (offline, user-run) + a device pass for HealthKit.
       `FoodItem` (+ OFF attribution). Cache locally. _(device-only scan; sim verifies build + mapping + search)_
 - [x] Online **branded search** fallback (OFF) when the bundled DB misses.
 - [x] **Custom foods** (user-entered nutrition labels) + edit. _(`EditFoodView`: create/edit/delete)_
-- [ ] **Recipes** (`Recipe` + `RecipeItem`): compose foods, set yield/servings, log a serving.
-- [ ] **Meals** (save a group of foods as a reusable quick-add).
-- [ ] **Water** tracking.
+- [x] **Recipes** (`Recipe` + `RecipeIngredient`): compose foods, set servings; logs a serving via a derived
+      `.recipe` food through the existing LogFoodView (micros / nutrient panel / completeness free).
+- [x] **Meals** (`SavedMeal`): "Save as meal" from a logged diary section → re-log the whole group in one tap.
+- [x] **Water** tracking (`WaterEntry` + ml/oz/cup unit + goal; diary card with quick-add + undo).
 
-**Done when:** users can log packaged products by scan, build recipes, and never hit a dead end.
+**Done when:** ✅ users can log packaged products by scan, build recipes, save meals, and track water — no dead ends.
 
 ---
 
@@ -267,3 +269,14 @@ pure food app can.
   scanned/online hits cached as `.openFoodFacts` `FoodItem`s (reuse-by-barcode, sync, ODbL attribution),
   miss → create-custom prefilled with the GTIN. No CloudKit schema change. Build green; OFF mapping +
   conversion unit-tested (live camera scan = device-only manual). **Next: recipes, meals, water.**
+- _2026-06-11_ — **Phase 3 finished (recipes + saved meals + water).** Reuse over parallel paths: a **recipe** is
+  a derived `.recipe` `FoodItem` (`RecipeMath.aggregate` sums ingredients → per-100 g + serving grams via
+  `NutrientVector` +/scaled, micros included) so a serving logs through the existing `LogFoodView`→`DiaryEntry`
+  path — micronutrient panel + completeness free; `RecipeEditorView` + `RecipeFoodPicker` recompute the food on
+  save; deleting a recipe cascades to its food/ingredients while logged history keeps its snapshot. A **saved
+  meal** (`SavedMeal`/`SavedMealItem`) snapshots a logged diary section ("Save as meal") and re-logs the group in
+  one tap (re-priced from live foods; deleted items skipped). **Water** (`WaterEntry` + `WaterUnit` ml/oz/cup +
+  goal, CloudPrefs-mirrored) adds a diary card with unit-aware quick-add + undo. Shared `FoodSearch` ranking
+  extracted (Data/FoodSearch.swift). **5 new @Model types = additive CloudKit schema → redeploy Dev→Prod before
+  the next TestFlight** (no migration code). Build green every slice; **57/57** logic tests pass (10 new:
+  4 water + 2 saved-meal + 4 recipe). **Next: Phase 4 (voice → photo capture).**

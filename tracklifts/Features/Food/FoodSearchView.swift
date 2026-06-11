@@ -10,6 +10,18 @@
 import SwiftUI
 import SwiftData
 
+/// One recipe-editor sheet at a time — new, or editing an existing recipe.
+private enum RecipeSheet: Identifiable {
+    case new
+    case edit(Recipe)
+    var id: String {
+        switch self {
+        case .new: "new"
+        case .edit(let recipe): "edit-\(recipe.persistentModelID.hashValue)"
+        }
+    }
+}
+
 struct FoodSearchView: View {
     let meal: Meal
     let day: Date
@@ -17,6 +29,8 @@ struct FoodSearchView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
     @Query(sort: \DiaryEntry.createdAt, order: .reverse) private var recentEntries: [DiaryEntry]
+    @Query(sort: \SavedMeal.createdAt, order: .reverse) private var savedMeals: [SavedMeal]
+    @Query(sort: \Recipe.createdAt, order: .reverse) private var recipes: [Recipe]
     @State private var searchText = ""
     @State private var results: [FoodItem] = []
     @State private var searching = false
@@ -30,6 +44,7 @@ struct FoodSearchView: View {
     @State private var onlineResults: [RemoteFood] = []
     @State private var onlineTask: Task<Void, Never>?
     @State private var newFood: NewFoodRequest?          // create sheet (typed name or scanned barcode)
+    @State private var recipeSheet: RecipeSheet?         // recipe create/edit sheet
 
     /// A request to open the custom-food editor, carrying any prefill.
     struct NewFoodRequest: Identifiable {
@@ -74,27 +89,7 @@ struct FoodSearchView: View {
     }
 
     @MainActor private func search(_ term: String) {
-        var descriptor = FetchDescriptor<FoodItem>(
-            predicate: #Predicate {
-                $0.name.localizedStandardContains(term) || $0.brand.localizedStandardContains(term)
-            },
-            sortBy: [SortDescriptor(\.name)]) // favorites-first is applied in the in-memory rank below
-        descriptor.fetchLimit = 60
-        let fetched = (try? context.fetch(descriptor)) ?? []
-        results = fetched.sorted {
-            ($0.isFavorite ? 0 : 1, Self.matchRank($0.name, query: term), $0.name)
-                < ($1.isFavorite ? 0 : 1, Self.matchRank($1.name, query: term), $1.name)
-        }
-    }
-
-    /// 0 = name starts with the query, 1 = some word starts with it, 2 = matches elsewhere.
-    private static func matchRank(_ name: String, query: String) -> Int {
-        let lname = name.lowercased(), lq = query.lowercased()
-        if lname.hasPrefix(lq) { return 0 }
-        if lname.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).contains(where: { $0.hasPrefix(lq) }) {
-            return 1
-        }
-        return 2
+        results = FoodSearch.run(term, in: context) // shared ranking (see Data/FoodSearch.swift)
     }
 
     /// Most-recently-logged distinct foods — a quick re-log shortcut.
@@ -116,15 +111,25 @@ struct FoodSearchView: View {
                 ScrollView {
                     LazyVStack(spacing: 10) {
                         if searchText.isEmpty {
+                            if !savedMeals.isEmpty {
+                                sectionHeader("Saved Meals")
+                                ForEach(savedMeals) { saved in savedMealRow(saved) }
+                            }
+                            if !recipes.isEmpty {
+                                sectionHeader("Recipes")
+                                ForEach(recipes) { recipe in recipeRow(recipe) }
+                            }
                             if !recentFoods.isEmpty {
                                 sectionHeader("Recent")
                                 ForEach(recentFoods) { food in foodLink(food) }
-                            } else {
+                            }
+                            if savedMeals.isEmpty && recipes.isEmpty && recentFoods.isEmpty {
                                 Text("Search to add a food")
                                     .font(.sans(15)).foregroundStyle(Palette.inkSecondary)
                                     .frame(maxWidth: .infinity).padding(.top, 50)
                             }
                             createCustomRow
+                            createRecipeRow
                         } else {
                             if results.isEmpty && !searching {
                                 Text("No matches for “\(searchText)”")
@@ -165,6 +170,12 @@ struct FoodSearchView: View {
             }
             .sheet(item: $newFood, onDismiss: { scheduleSearch(searchText) }) { req in
                 EditFoodView(food: nil, prefillName: req.name, prefillBarcode: req.barcode)
+            }
+            .sheet(item: $recipeSheet) { sheet in
+                switch sheet {
+                case .new: RecipeEditorView(recipe: nil)
+                case .edit(let recipe): RecipeEditorView(recipe: recipe)
+                }
             }
             .overlay { if lookingUp { lookupOverlay } }
         }
@@ -252,6 +263,88 @@ struct FoodSearchView: View {
             .buttonStyle(.plain)
             .padding(.trailing, 10)
         }
+    }
+
+    // MARK: - Saved meals
+
+    /// Tapping logs every item into this sheet's meal slot + day, then dismisses.
+    private func savedMealRow(_ saved: SavedMeal) -> some View {
+        Button { logSavedMeal(saved) } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "bookmark.fill")
+                    .font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.ember)
+                    .frame(width: 26)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(saved.name).font(.sans(15, .semibold)).foregroundStyle(Palette.ink).lineLimit(1)
+                    Text("\(saved.orderedItems.count) items · \(Int(saved.totalKcal.rounded())) kcal")
+                        .font(.sans(11)).foregroundStyle(Palette.inkSecondary).lineLimit(1)
+                }
+                Spacer(minLength: 12)
+                Image(systemName: "plus.circle.fill")
+                    .font(.system(size: 18, weight: .semibold)).foregroundStyle(Palette.ember)
+            }
+            .cardStyle(padding: 14)
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button(role: .destructive) {
+                context.delete(saved)
+                try? context.save()
+            } label: { Label("Delete Meal", systemImage: "trash") }
+        }
+    }
+
+    private func logSavedMeal(_ saved: SavedMeal) {
+        for item in saved.orderedItems {
+            guard let food = item.food else { continue } // skip items whose food was deleted
+            context.insert(DiaryEntry(date: day, meal: meal, food: food,
+                                      grams: item.grams, portionLabel: item.portionLabel))
+        }
+        try? context.save()
+        dismiss()                                              // back to the diary — keep it instant
+        HealthKitManager.shared.syncDay(day, context: context) // best-effort mirror, deferred internally
+    }
+
+    // MARK: - Recipes
+
+    /// Tapping logs the recipe's derived per-serving food via the standard LogFoodView.
+    private func recipeRow(_ recipe: Recipe) -> some View {
+        Button {
+            if let food = recipe.food { pendingFood = food }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "list.clipboard.fill")
+                    .font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.ember).frame(width: 26)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(recipe.name).font(.sans(15, .semibold)).foregroundStyle(Palette.ink).lineLimit(1)
+                    Text(recipeSubtitle(recipe)).font(.sans(11)).foregroundStyle(Palette.inkSecondary).lineLimit(1)
+                }
+                Spacer(minLength: 12)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .bold)).foregroundStyle(Palette.inkTertiary)
+            }
+            .cardStyle(padding: 14)
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button { recipeSheet = .edit(recipe) } label: { Label("Edit Recipe", systemImage: "pencil") }
+            Button(role: .destructive) {
+                context.delete(recipe); try? context.save()
+            } label: { Label("Delete Recipe", systemImage: "trash") }
+        }
+    }
+
+    private func recipeSubtitle(_ recipe: Recipe) -> String {
+        let food = recipe.food
+        let kcal = Int(((food?.kcalPer100g ?? 0) * (food?.defaultPortion.grams ?? 0) / 100).rounded())
+        let n = recipe.orderedIngredients.count
+        return "\(n) ingredient\(n == 1 ? "" : "s") · \(kcal) kcal/serving"
+    }
+
+    /// Always-available entry to build a recipe from existing foods.
+    private var createRecipeRow: some View {
+        Button { recipeSheet = .new } label: { createRowLabel("Create a recipe") }
+            .buttonStyle(.plain).padding(.top, 6)
     }
 
     // MARK: - Barcode + Open Food Facts
@@ -420,6 +513,7 @@ struct LogFoodView: View {
     @State private var portion: FoodPortion
     @State private var quantity: Double
     @State private var editing = false
+    @State private var editingRecipe = false
 
     init(food: FoodItem, meal: Meal, day: Date, onLogged: @escaping () -> Void) {
         self.food = food
@@ -484,25 +578,43 @@ struct LogFoodView: View {
                         .font(.sans(11)).foregroundStyle(Palette.inkTertiary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-
-                VStack(alignment: .leading, spacing: 10) {
-                    SectionLabel(title: "Meal", systemImage: "calendar")
-                    Picker("Meal", selection: $meal) {
-                        ForEach(Meal.allCases) { m in Text(m.label).tag(m) }
-                    }
-                    .pickerStyle(.segmented)
-                }
-
-                EmberButton(title: "Add to \(meal.label)", systemImage: "plus") { add() }
             }
             .padding(20)
         }
         .scrollIndicators(.hidden)
         .background(AppBackground())
+        // Meal picker + commit pinned to the bottom so the action stays in reach
+        // without scrolling past the full nutrition-facts panel.
+        .safeAreaInset(edge: .bottom) {
+            VStack(alignment: .leading, spacing: 10) {
+                SectionLabel(title: "Meal", systemImage: "calendar")
+                Picker("Meal", selection: $meal) {
+                    ForEach(Meal.allCases) { m in Text(m.label).tag(m) }
+                }
+                .pickerStyle(.segmented)
+                EmberButton(title: "Add to \(meal.label)", systemImage: "plus") { add() }
+                    .padding(.top, 4)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 14)
+            .padding(.bottom, 8)
+            .background(alignment: .top) {
+                Palette.bgBottom
+                    .overlay(alignment: .top) { Palette.hairline.frame(height: 1) }
+                    .ignoresSafeArea(edges: .bottom)
+            }
+        }
         .navigationTitle("Log Food")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if food.isCustom {
+            if food.source == .recipe, food.recipe != nil {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { editingRecipe = true } label: {
+                        Image(systemName: "pencil").font(.system(size: 15, weight: .semibold))
+                    }
+                    .foregroundStyle(Palette.ember)
+                }
+            } else if food.isCustom {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { editing = true } label: {
                         Image(systemName: "pencil").font(.system(size: 15, weight: .semibold))
@@ -512,6 +624,9 @@ struct LogFoodView: View {
             }
         }
         .sheet(isPresented: $editing) { EditFoodView(food: food) }
+        .sheet(isPresented: $editingRecipe) {
+            if let recipe = food.recipe { RecipeEditorView(recipe: recipe) }
+        }
     }
 
     private func stepperButton(_ icon: String, _ action: @escaping () -> Void) -> some View {

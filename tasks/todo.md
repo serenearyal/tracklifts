@@ -1,3 +1,58 @@
+# Task: Phase 3 (finish) — Water + Saved Meals + Recipes (2026-06-11)
+
+Plan: `~/.claude/plans/mossy-wondering-lamport.md` (approved). Finishes Phase 3 — cover the long tail so
+users never hit a dead end. Three independently-shippable slices (Water → Saved Meals → Recipes), each
+reusing the existing diary/log engine rather than a parallel path. **CloudKit:** 5 new `@Model` types =
+additive schema change → redeploy Dev→Prod in CloudKit Console before the next TestFlight.
+
+## Slice A — Water tracking
+- [x] `Models/Water.swift` (new): `WaterEntry` (date, amountMl) + `WaterUnit` (ml/oz/cup) + `WaterGoals` (goal/unit keys)
+- [x] `CloudSync.swift`: register `WaterEntry.self` in the Schema
+- [x] `CloudPrefs.swift`: mirror `goalWaterMl` + `waterUnit`
+- [x] `FoodDiaryView.swift`: water card after the summary (progress vs goal, unit-aware quick-add, undo)
+- [x] `SettingsView.swift`: water goal + unit row in Daily Targets (edits in the chosen unit, stores ml)
+- [x] `WaterTests`: unit round-trip + start-of-day normalization + day-total filtering
+- [x] Build green (iPhone 17 / iOS 26.2 sim, 0 warnings in new/edited files); 51/51 logic tests pass (4 new water)
+
+## Slice B — Saved Meals
+- [x] `SavedMeal`/`SavedMealItem` models (+ `FoodItem.savedMealItems` inverse) + schema registration
+- [x] "Save as meal" action (bookmark button) on a diary meal section that has entries → `SaveMealSheet`
+- [x] Log-as-group from FoodSearchView empty state → one DiaryEntry per item into the sheet's meal slot
+- [x] `SavedMealTests`: builds from foods → logs N entries w/ right grams/portion/meal/day; deleted-food item skipped
+- [x] Build green (0 warnings); 53/53 logic tests pass (2 new saved-meal)
+
+## Slice C — Recipes
+- [x] `Recipe`/`RecipeIngredient` models (+ `FoodItem.recipeIngredients`/`recipe` inverses) + `FoodSource.recipe` + schema
+- [x] `RecipeMath.aggregate` (pure): ingredients → derived per100g + serving grams (reuses NutrientVector +/scaled)
+- [x] `FoodSearch` helper extracted (Data/FoodSearch.swift); FoodSearchView.search + RecipeFoodPicker both use it
+- [x] `RecipeEditorView` + `RecipeFoodPicker` (clones EditFoodView scaffold; live per-serving MacroPreview)
+- [x] FoodSearchView: Recipes section + "Create a recipe"; recipe foods log via existing LogFoodView; pencil → RecipeEditorView
+- [x] `RecipeTests`: pure aggregation + derived-food serving math (424→212/serving) + delete keeps logged history
+- [x] Build green (0 warnings in my files); 57/57 logic tests pass (4 new recipe)
+
+## Review (2026-06-11) — Phase 3 finished (Water + Saved Meals + Recipes)
+- **Reuse over parallel paths.** Recipes become a derived `FoodItem` (source `.recipe`) so a serving logs through
+  the *existing* LogFoodView → DiaryEntry path — micros, nutrient panel, completeness all work free. Saved meals
+  are just a batch of normal DiaryEntry writes. Water is a tiny entry model + a diary card. Almost no new log UI.
+- **Water** (Slice A): `WaterEntry` (ml-canonical) + `WaterUnit` (ml/oz/cup) + `WaterGoals`; CloudPrefs-mirrored
+  goal/unit; diary card after the summary (progress vs goal, unit-aware quick-add chips, undo); Settings goal row
+  edits in the chosen unit, stores ml.
+- **Saved Meals** (Slice B): `SavedMeal`/`SavedMealItem`; "Save as meal" bookmark on a logged diary meal section
+  → `SaveMealSheet`; surfaced in search's empty state, taps log every item into the sheet's meal/day; items
+  re-price from the live food and skip a deleted one (snapshot kept for display).
+- **Recipes** (Slice C): `Recipe`/`RecipeIngredient`; pure `RecipeMath.aggregate`; `RecipeEditorView`
+  (+ `RecipeFoodPicker`) recomputes the derived food on save; Recipes section + "Create a recipe"; recipe foods
+  are searchable and edit via a recipe-aware pencil in LogFoodView. Deleting a recipe cascades to its food +
+  ingredients; logged history keeps its immutable snapshot (verified by test).
+- **iOS-17 + CloudKit:** every new to-many child wired from the to-one side after insert; every relationship
+  optional with defaults. **5 new @Model types = additive schema change → redeploy CloudKit Dev→Prod before the
+  next TestFlight** (no migration code needed; existing rows unaffected).
+- **Verified:** build green (0 warnings in new/edited files) after each slice; **57/57** logic tests pass
+  (10 new: 4 water + 2 saved-meal + 4 recipe). Manual device/sim walk-throughs left to the user.
+- **Not committed yet** (awaiting your go-ahead, per the no-auto-commit rule).
+
+---
+
 # Task: Phase 3 — Barcode scan + Open Food Facts (2026-06-11)
 
 Plan: `~/.claude/plans/mossy-wondering-lamport.md` (approved; scope = barcode + online search). First network

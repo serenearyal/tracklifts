@@ -55,6 +55,11 @@ enum CloudSync {
             FoodItem.self,
             FoodPortion.self,
             DiaryEntry.self,
+            WaterEntry.self,
+            SavedMeal.self,
+            SavedMealItem.self,
+            Recipe.self,
+            RecipeIngredient.self,
         ])
         if isHermetic {
             let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true,

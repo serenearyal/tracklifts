@@ -14,11 +14,13 @@ import SwiftData
 private enum FoodSheet: Identifiable {
     case search(Meal)
     case edit(DiaryEntry)
+    case saveMeal(Meal)
 
     var id: String {
         switch self {
         case .search(let meal): "search-\(meal.rawValue)"
         case .edit(let entry): "edit-\(entry.persistentModelID.hashValue)"
+        case .saveMeal(let meal): "savemeal-\(meal.rawValue)"
         }
     }
 }
@@ -26,11 +28,14 @@ private enum FoodSheet: Identifiable {
 struct FoodDiaryView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \DiaryEntry.createdAt) private var allEntries: [DiaryEntry]
+    @Query(sort: \WaterEntry.createdAt) private var allWater: [WaterEntry]
 
     @AppStorage(NutritionGoals.energyKey) private var goalEnergy = NutritionGoals.defaultEnergy
     @AppStorage(NutritionGoals.proteinKey) private var goalProtein = NutritionGoals.defaultProtein
     @AppStorage(NutritionGoals.carbsKey) private var goalCarbs = NutritionGoals.defaultCarbs
     @AppStorage(NutritionGoals.fatKey) private var goalFat = NutritionGoals.defaultFat
+    @AppStorage(WaterGoals.goalKey) private var goalWaterMl = WaterGoals.defaultGoalMl
+    @AppStorage(WaterGoals.unitKey) private var waterUnitRaw = WaterUnit.ml.rawValue
 
     @State private var day: Date = Calendar.current.startOfDay(for: .now)
     @State private var sheet: FoodSheet?
@@ -56,6 +61,7 @@ struct FoodDiaryView: View {
                     dateNav.diaryRow(top: 8, bottom: 2)
                     searchBar.diaryRow(top: 4, bottom: 2)
                     summaryCard(total: total).diaryRow(top: 6, bottom: 2)
+                    waterCard.diaryRow(top: 2, bottom: 2)
                     microLink(total: total).diaryRow(top: 2, bottom: 2)
                     if dayEntries.isEmpty, !previousDayEntries.isEmpty {
                         copyPreviousButton.diaryRow()
@@ -74,6 +80,7 @@ struct FoodDiaryView: View {
                 switch item {
                 case .search(let meal): FoodSearchView(meal: meal, day: day)
                 case .edit(let entry): EditDiaryEntrySheet(entry: entry)
+                case .saveMeal(let meal): SaveMealSheet(defaultName: meal.label, entries: entries(for: meal))
                 }
             }
         }
@@ -176,6 +183,85 @@ struct FoodDiaryView: View {
         .cardStyle(padding: 18)
     }
 
+    // MARK: - Water
+
+    private var waterUnit: WaterUnit { WaterUnit(rawValue: waterUnitRaw) ?? .ml }
+    private var dayWater: [WaterEntry] {
+        allWater.filter { Calendar.current.isDate($0.date, inSameDayAs: day) }
+    }
+    private var dayWaterMl: Double { dayWater.reduce(0) { $0 + $1.amountMl } }
+
+    private var waterCard: some View {
+        let unit = waterUnit
+        let total = dayWaterMl
+        let tint = Color(hex: 0x4FC3F7)
+        return VStack(spacing: 14) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Eyebrow(text: "Water", color: tint)
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(waterText(total))
+                            .font(.display(34)).foregroundStyle(Palette.ink)
+                            .contentTransition(.numericText())
+                        Text("/ \(waterText(goalWaterMl)) \(unit.label)")
+                            .font(.sans(14, .semibold)).foregroundStyle(Palette.inkSecondary)
+                    }
+                }
+                Spacer()
+                Button { undoLastWater() } label: {
+                    Image(systemName: "arrow.uturn.backward")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(dayWater.isEmpty ? Palette.inkTertiary : tint)
+                        .frame(width: 38, height: 38)
+                        .background(Palette.surfaceRaised, in: .circle)
+                }
+                .buttonStyle(.plain)
+                .disabled(dayWater.isEmpty)
+            }
+            MacroProgressBar(value: total, goal: goalWaterMl, color: tint)
+            HStack(spacing: 10) {
+                ForEach(unit.quickAdds, id: \.self) { amount in
+                    Button { addWater(amount * unit.milliliters) } label: {
+                        Text(quickAddLabel(amount))
+                            .font(.sans(13, .bold)).foregroundStyle(tint)
+                            .frame(maxWidth: .infinity).padding(.vertical, 10)
+                            .background(tint.opacity(0.12), in: .rect(cornerRadius: 12))
+                            .overlay(RoundedRectangle(cornerRadius: 12)
+                                .strokeBorder(tint.opacity(0.3), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .cardStyle(padding: 18)
+    }
+
+    /// A milliliter amount shown in the chosen unit (ml whole; oz/cups ≤1 decimal).
+    private func waterText(_ ml: Double) -> String {
+        let v = ml / waterUnit.milliliters
+        if waterUnit == .ml { return Int(v.rounded()).formatted() }
+        return v.formatted(.number.precision(.fractionLength(0...1)))
+    }
+    /// "+250 ml" / "+8 oz" / "+1 cup" / "+2 cups".
+    private func quickAddLabel(_ amount: Double) -> String {
+        let n = amount == amount.rounded() ? Int(amount).formatted() : amount.formatted()
+        if waterUnit == .cup { return "+\(n) cup" + (amount == 1 ? "" : "s") }
+        return "+\(n) \(waterUnit.label)"
+    }
+    private func addWater(_ ml: Double) {
+        withAnimation(.snappy) {
+            context.insert(WaterEntry(date: day, amountMl: ml))
+            try? context.save()
+        }
+    }
+    private func undoLastWater() {
+        guard let last = dayWater.max(by: { $0.createdAt < $1.createdAt }) else { return }
+        withAnimation(.snappy) {
+            context.delete(last)
+            try? context.save()
+        }
+    }
+
     private func microLink(total: NutrientVector) -> some View {
         let completeness = Int(Completeness.score(total: total, sex: Profile.sex, age: Profile.age).rounded())
         return NavigationLink {
@@ -251,17 +337,27 @@ struct FoodDiaryView: View {
                 }
             }
         } header: {
-            mealHeader(meal, kcal: kcal)
+            mealHeader(meal, kcal: kcal, hasItems: !items.isEmpty)
         }
     }
 
-    private func mealHeader(_ meal: Meal, kcal: Double) -> some View {
+    private func mealHeader(_ meal: Meal, kcal: Double, hasItems: Bool) -> some View {
         HStack(spacing: 8) {
             Image(systemName: meal.symbol).font(.system(size: 13, weight: .bold)).foregroundStyle(Palette.ember)
             Text(meal.label).font(.sans(13, .bold)).tracking(1).foregroundStyle(Palette.ink).textCase(nil)
             Spacer()
             if kcal > 0 {
                 Text("\(Int(kcal.rounded())) kcal").font(.sans(12, .semibold)).foregroundStyle(Palette.inkSecondary)
+            }
+            if hasItems {
+                Button { sheet = .saveMeal(meal) } label: {
+                    Image(systemName: "bookmark")
+                        .font(.system(size: 12, weight: .bold)).foregroundStyle(Palette.ember)
+                        .frame(width: 28, height: 28)
+                        .background(Palette.surface, in: .circle)
+                        .overlay(Circle().strokeBorder(Palette.hairline, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
             }
             Button { sheet = .search(meal) } label: {
                 Image(systemName: "plus")
