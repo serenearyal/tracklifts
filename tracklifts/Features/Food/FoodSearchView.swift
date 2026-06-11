@@ -23,6 +23,21 @@ struct FoodSearchView: View {
     @State private var searchTask: Task<Void, Never>?
     @FocusState private var searchFocused: Bool
 
+    // Barcode + Open Food Facts (Phase 3)
+    @State private var scanning = false
+    @State private var lookingUp = false
+    @State private var pendingFood: FoodItem?            // programmatic push to LogFoodView
+    @State private var onlineResults: [RemoteFood] = []
+    @State private var onlineTask: Task<Void, Never>?
+    @State private var newFood: NewFoodRequest?          // create sheet (typed name or scanned barcode)
+
+    /// A request to open the custom-food editor, carrying any prefill.
+    struct NewFoodRequest: Identifiable {
+        let id = UUID()
+        var name = ""
+        var barcode = ""
+    }
+
     /// Filtering runs in SQLite (predicate + `fetchLimit`), not by loading the
     /// whole catalog into memory — at thousands of foods, scanning every row in
     /// Swift on each keystroke janks the main thread. Keystrokes are debounced;
@@ -31,6 +46,8 @@ struct FoodSearchView: View {
     /// "Kiwifruit, raw" above "Beverages, … Kiwi".
     private func scheduleSearch(_ raw: String) {
         searchTask?.cancel()
+        onlineTask?.cancel()
+        onlineResults = []
         let term = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !term.isEmpty else { results = []; searching = false; return }
         searching = true
@@ -39,6 +56,20 @@ struct FoodSearchView: View {
             guard !Task.isCancelled else { return }
             search(term)
             searching = false
+            // When the bundled catalog is thin on matches, ask Open Food Facts too.
+            if results.count < 8 { scheduleOnlineSearch(term) }
+        }
+    }
+
+    /// Branded online fallback — a gentler debounce so typing doesn't hammer OFF.
+    private func scheduleOnlineSearch(_ term: String) {
+        onlineTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !Task.isCancelled else { return }
+            let found = await FoodProviders.shared.search(term)
+            guard !Task.isCancelled else { return }
+            let localBarcodes = Set(results.map(\.barcode).filter { !$0.isEmpty })
+            onlineResults = found.filter { $0.barcode.isEmpty || !localBarcodes.contains($0.barcode) }
         }
     }
 
@@ -93,6 +124,7 @@ struct FoodSearchView: View {
                                     .font(.sans(15)).foregroundStyle(Palette.inkSecondary)
                                     .frame(maxWidth: .infinity).padding(.top, 50)
                             }
+                            createCustomRow
                         } else {
                             if results.isEmpty && !searching {
                                 Text("No matches for “\(searchText)”")
@@ -100,6 +132,13 @@ struct FoodSearchView: View {
                                     .frame(maxWidth: .infinity).padding(.top, 50)
                             }
                             ForEach(results) { food in foodLink(food) }
+                            if !onlineResults.isEmpty {
+                                onlineHeader
+                                ForEach(Array(onlineResults.enumerated()), id: \.offset) { _, r in
+                                    remoteRow(r)
+                                }
+                            }
+                            if !searching { createNamedRow }
                         }
                     }
                     .padding(.horizontal, 20)
@@ -118,6 +157,16 @@ struct FoodSearchView: View {
             }
             .onAppear { searchFocused = true }
             .onChange(of: searchText) { _, newValue in scheduleSearch(newValue) }
+            .navigationDestination(item: $pendingFood) { food in
+                LogFoodView(food: food, meal: meal, day: day) { dismiss() }
+            }
+            .fullScreenCover(isPresented: $scanning) {
+                BarcodeScannerView(onScan: handleScan)
+            }
+            .sheet(item: $newFood, onDismiss: { scheduleSearch(searchText) }) { req in
+                EditFoodView(food: nil, prefillName: req.name, prefillBarcode: req.barcode)
+            }
+            .overlay { if lookingUp { lookupOverlay } }
         }
     }
 
@@ -139,6 +188,11 @@ struct FoodSearchView: View {
                 }
                 .buttonStyle(.plain)
             }
+            Button { scanning = true } label: {
+                Image(systemName: "barcode.viewfinder")
+                    .font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.ember)
+            }
+            .buttonStyle(.plain)
         }
         .padding(.horizontal, 14).padding(.vertical, 12)
         .background(Palette.surface, in: .rect(cornerRadius: 14))
@@ -154,6 +208,28 @@ struct FoodSearchView: View {
             Spacer()
         }
         .padding(.top, 6)
+    }
+
+    /// Always-available entry to build a food that isn't in the catalog.
+    private var createCustomRow: some View {
+        Button { newFood = NewFoodRequest() } label: { createRowLabel("Create a custom food") }
+            .buttonStyle(.plain).padding(.top, 6)
+    }
+
+    /// Offer to create the exact food the user typed — prefills its name.
+    private var createNamedRow: some View {
+        Button { newFood = NewFoodRequest(name: searchText) } label: { createRowLabel("Create “\(searchText)”") }
+            .buttonStyle(.plain).padding(.top, 6)
+    }
+
+    private func createRowLabel(_ title: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "plus.circle.fill")
+                .font(.system(size: 18, weight: .semibold)).foregroundStyle(Palette.ember)
+            Text(title).font(.sans(15, .semibold)).foregroundStyle(Palette.ink).lineLimit(1)
+            Spacer()
+        }
+        .cardStyle(padding: 14)
     }
 
     /// Full-row tap logs the food; the overlaid star toggles favorite without navigating.
@@ -176,6 +252,100 @@ struct FoodSearchView: View {
             .buttonStyle(.plain)
             .padding(.trailing, 10)
         }
+    }
+
+    // MARK: - Barcode + Open Food Facts
+
+    private var onlineHeader: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "globe")
+                .font(.system(size: 11, weight: .bold)).foregroundStyle(Palette.inkSecondary)
+            Text("Online · Open Food Facts".uppercased())
+                .font(.sans(12, .bold)).tracking(1.5).foregroundStyle(Palette.inkSecondary)
+            Spacer()
+        }
+        .padding(.top, 10)
+    }
+
+    /// A network search hit (not yet cached) — tapping caches it, then logs it.
+    private func remoteRow(_ r: RemoteFood) -> some View {
+        Button { pendingFood = upsert(r) } label: {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(r.name).font(.sans(15, .semibold)).foregroundStyle(Palette.ink).lineLimit(1)
+                    HStack(spacing: 5) {
+                        if !r.brand.isEmpty {
+                            Text(r.brand).font(.sans(11, .semibold)).foregroundStyle(Palette.inkSecondary)
+                            Text("·").foregroundStyle(Palette.inkTertiary)
+                        }
+                        Text("\(Int(r.per100g.energy.rounded())) kcal / 100 g")
+                            .font(.sans(11)).foregroundStyle(Palette.inkSecondary).lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 12)
+                Image(systemName: "icloud.and.arrow.down")
+                    .font(.system(size: 14, weight: .semibold)).foregroundStyle(Palette.inkTertiary)
+            }
+            .cardStyle(padding: 14)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var lookupOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.45).ignoresSafeArea()
+            VStack(spacing: 12) {
+                ProgressView().tint(Palette.ember)
+                Text("Looking up barcode…").font(.sans(14, .semibold)).foregroundStyle(Palette.ink)
+            }
+            .padding(24).background(Palette.surface, in: .rect(cornerRadius: 16))
+        }
+    }
+
+    /// Scan result: prefer a cached/custom food with this barcode (offline + instant),
+    /// else resolve via Open Food Facts, else offer to create it.
+    private func handleScan(_ code: String) {
+        let gtin = code.filter(\.isNumber)
+        Task { @MainActor in
+            if let local = localFood(barcode: gtin) { pendingFood = local; return }
+            lookingUp = true
+            defer { lookingUp = false }
+            if let remote = await FoodProviders.shared.lookup(barcode: gtin) {
+                pendingFood = upsert(remote)
+            } else {
+                newFood = NewFoodRequest(barcode: gtin)
+            }
+        }
+    }
+
+    private func localFood(barcode: String) -> FoodItem? {
+        guard !barcode.isEmpty else { return nil }
+        var d = FetchDescriptor<FoodItem>(predicate: #Predicate { $0.barcode == barcode })
+        d.fetchLimit = 1
+        return try? context.fetch(d).first
+    }
+
+    /// Cache a remote food as a `FoodItem`, reusing an existing row with the same
+    /// barcode so re-scans never duplicate. Portion wired from the to-one side
+    /// only (appending to the to-many on a fresh model crashes iOS 17).
+    @discardableResult
+    private func upsert(_ r: RemoteFood) -> FoodItem {
+        if let existing = localFood(barcode: r.barcode) {
+            existing.name = r.name
+            existing.brand = r.brand
+            existing.per100g = r.per100g
+            try? context.save()
+            return existing
+        }
+        let food = FoodItem(name: r.name, brand: r.brand, source: .openFoodFacts,
+                            per100g: r.per100g, barcode: r.barcode)
+        context.insert(food)
+        let portion = FoodPortion(label: r.servingGrams > 0 ? "1 serving" : "100 g",
+                                  grams: r.servingGrams > 0 ? r.servingGrams : 100)
+        context.insert(portion)
+        portion.food = food
+        try? context.save()
+        return food
     }
 }
 
@@ -249,6 +419,7 @@ struct LogFoodView: View {
     @State private var meal: Meal
     @State private var portion: FoodPortion
     @State private var quantity: Double
+    @State private var editing = false
 
     init(food: FoodItem, meal: Meal, day: Date, onLogged: @escaping () -> Void) {
         self.food = food
@@ -308,6 +479,12 @@ struct LogFoodView: View {
 
                 NutritionFactsView(nutrients: nutrients)
 
+                if food.source == .openFoodFacts {
+                    Text("Data from Open Food Facts, licensed under ODbL.")
+                        .font(.sans(11)).foregroundStyle(Palette.inkTertiary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
                 VStack(alignment: .leading, spacing: 10) {
                     SectionLabel(title: "Meal", systemImage: "calendar")
                     Picker("Meal", selection: $meal) {
@@ -324,6 +501,17 @@ struct LogFoodView: View {
         .background(AppBackground())
         .navigationTitle("Log Food")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if food.isCustom {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { editing = true } label: {
+                        Image(systemName: "pencil").font(.system(size: 15, weight: .semibold))
+                    }
+                    .foregroundStyle(Palette.ember)
+                }
+            }
+        }
+        .sheet(isPresented: $editing) { EditFoodView(food: food) }
     }
 
     private func stepperButton(_ icon: String, _ action: @escaping () -> Void) -> some View {

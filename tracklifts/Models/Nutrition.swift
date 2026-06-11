@@ -127,6 +127,25 @@ struct NutrientVector: Codable, Equatable {
     static func decode(_ data: Data) -> NutrientVector {
         (try? decoder.decode(NutrientVector.self, from: data)) ?? NutrientVector()
     }
+
+    // MARK: Custom foods — per-serving entry ↔ per-100 g storage
+
+    /// Build a per-100 g vector from amounts entered **per serving** (the way a
+    /// nutrition label reads), keyed by `Nutrient.rawValue`. Inverse of
+    /// `perServing(servingGrams:)`; zero amounts are dropped to keep the bag sparse.
+    static func fromPerServing(_ amounts: [String: Double], servingGrams: Double) -> NutrientVector {
+        guard servingGrams > 0 else { return NutrientVector([:]) } // truly empty, not zero-filled macros
+        let factor = 100 / servingGrams
+        return NutrientVector(amounts.compactMapValues { $0 == 0 ? nil : $0 * factor })
+    }
+
+    /// The amounts **per serving** of `servingGrams`, keyed by `Nutrient.rawValue`
+    /// — used to repopulate the custom-food editor when editing an existing food.
+    func perServing(servingGrams: Double) -> [String: Double] {
+        guard servingGrams > 0 else { return [:] }
+        let factor = servingGrams / 100
+        return values.mapValues { $0 * factor }
+    }
 }
 
 /// Where a food came from.

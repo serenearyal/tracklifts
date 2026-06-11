@@ -179,6 +179,9 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     SectionLabel(title: "About", systemImage: "info.circle.fill")
                     row("Version", "1.0")
+                    row("Food data", "Open Food Facts")
+                    Text("Branded foods & barcodes come from Open Food Facts, licensed under the ODbL.")
+                        .font(.sans(12)).foregroundStyle(Palette.inkSecondary)
                 }
                 .cardStyle(padding: 18)
 

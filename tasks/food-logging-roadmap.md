@@ -14,7 +14,8 @@ trends + HealthKit; build green, logic tests pass). **Phase 2 data loaded:** `Re
 generated from the **full USDA SR-Legacy (7,756 foods, ~32-nutrient panels)** and verified seeding on the
 sim (7,756 `FoodItem`s, micros present); a **Nutrition Facts** breakdown now shows in the log + edit
 sheets (not just macros). _Commit the 7.3 MB JSON to ship it; the raw FDC CSVs are gitignored._
-**Next: Phase 3** (barcode, custom foods, recipes, water). Remaining Phase 1 polish: custom foods, true FTS.
+**Phase 3 in progress:** ✅ custom foods, ✅ barcode scan + Open Food Facts (barcode lookup + online branded
+search, local cache, ODbL). **Next: recipes, meals, water.** Remaining Phase 1 polish: true FTS.
 
 ---
 
@@ -156,15 +157,15 @@ awaiting the USDA data import (offline, user-run) + a device pass for HealthKit.
 
 ---
 
-## Phase 3 — Breadth: barcode, custom foods, recipes, water  ⬜
+## Phase 3 — Breadth: barcode, custom foods, recipes, water  🟦 (in progress)
 
 **Goal:** cover the long tail so users aren't blocked by a missing food.
 
 **Build**
-- [ ] **Barcode scan** (`VisionKit DataScannerViewController`) → GTIN → Open Food Facts → upsert
-      `FoodItem` (+ OFF attribution). Cache locally.
-- [ ] Online **branded search** fallback (OFF) when the bundled DB misses.
-- [ ] **Custom foods** (user-entered nutrition labels) + edit.
+- [x] **Barcode scan** (`VisionKit DataScannerViewController`) → GTIN → Open Food Facts → upsert
+      `FoodItem` (+ OFF attribution). Cache locally. _(device-only scan; sim verifies build + mapping + search)_
+- [x] Online **branded search** fallback (OFF) when the bundled DB misses.
+- [x] **Custom foods** (user-entered nutrition labels) + edit. _(`EditFoodView`: create/edit/delete)_
 - [ ] **Recipes** (`Recipe` + `RecipeItem`): compose foods, set yield/servings, log a serving.
 - [ ] **Meals** (save a group of foods as a reusable quick-add).
 - [ ] **Water** tracking.
@@ -256,3 +257,13 @@ pure food app can.
   (TestFlight uses Production), and re-deploy after any future model change (changes must stay
   additive); (2) requires the paid Apple Developer Program on team M9Q5YCJ5NU — build once in Xcode
   with automatic signing so the container/capability auto-register.
+- _2026-06-11_ — **Phase 3 underway.** **Custom foods** (`EditFoodView`: create/edit/delete; nutrients entered
+  per serving → stored per 100 g; surfaces in search + logs like any food; reuses `isCustom`/`.custom`/
+  `NutrientVector` — no schema change). **Barcode + Open Food Facts**: `FoodProvider` adapter +
+  `OpenFoodFactsProvider` (barcode lookup + online branded search over HTTPS, pure nutriment→`NutrientVector`
+  mapping with kcal/kJ + salt→sodium + g→mg); `BarcodeScannerView` (VisionKit DataScanner live camera +
+  a **photo-library path** — `PhotosPicker` → Vision `VNDetectBarcodesRequest` on a still image, so you can
+  log a product later / when there's no camera, and the sim can exercise the whole barcode→OFF→log flow);
+  scanned/online hits cached as `.openFoodFacts` `FoodItem`s (reuse-by-barcode, sync, ODbL attribution),
+  miss → create-custom prefilled with the GTIN. No CloudKit schema change. Build green; OFF mapping +
+  conversion unit-tested (live camera scan = device-only manual). **Next: recipes, meals, water.**

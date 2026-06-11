@@ -1,3 +1,71 @@
+# Task: Phase 3 — Barcode scan + Open Food Facts (2026-06-11)
+
+Plan: `~/.claude/plans/mossy-wondering-lamport.md` (approved; scope = barcode + online search). First network
+layer, behind a `FoodProvider` adapter; OFF foods reuse existing barcode/source/NutrientVector → no schema change.
+
+- [x] Slice 1: `Data/FoodProvider.swift` (protocol + RemoteFood) + `Data/OpenFoodFacts.swift` (client + pure
+      nutriment mapping: kcal/kJ, salt→sodium, g→mg minerals). `OpenFoodFactsTests` (embedded fixtures, hermetic)
+- [x] Slice 2: `Features/Food/BarcodeScannerView.swift` (VisionKit wrapper + unsupported fallback);
+      `INFOPLIST_KEY_NSCameraUsageDescription` in both app configs (pbxproj)
+- [x] Slice 3: FoodSearchView scan button → scanner → lookup → upsert/cache → LogFoodView; miss → EditFoodView
+      w/ `prefillBarcode`; ODbL attribution on OFF foods; Settings credit row
+- [x] Slice 4: online OFF text-search fallback section in FoodSearchView (debounced, cancellable)
+- [ ] Slice 5 (deferred, optional): CloudDedup collapse OFF foods by barcode (local reuse-by-barcode already
+      prevents single-device dups; cross-device dup is an edge case)
+- [x] Build green (iPhone 17 / iOS 26.2 sim, 0 warnings); 47/47 logic tests pass (TEST SUCCEEDED).
+      Camera scan = device-only manual (Simulator has no camera).
+
+## Review (2026-06-11) — Barcode + Open Food Facts shipped (Slices 1–4)
+- **First network layer**, behind `FoodProvider` (Data/FoodProvider.swift); `OpenFoodFactsProvider`
+  (Data/OpenFoodFacts.swift) does v2 product + cgi search over HTTPS with an OFF User-Agent. Pure
+  nutriment→`NutrientVector` mapping (kcal/kJ, salt→sodium, g→mg) is unit-tested against embedded fixtures.
+- **Scanner** (BarcodeScannerView): VisionKit `DataScannerViewController` (ean13/8, upce, code128/39); graceful
+  unsupported state on the Simulator. Needed `import Vision` for `VNBarcodeSymbology` + NSCameraUsageDescription.
+- **Photo upload** (2026-06-11, per request — log a product later / no box in hand): the scanner also accepts a
+  **library photo** via `PhotosPicker` (no permission string) → `VNDetectBarcodesRequest` on the still image
+  (off-main, orientation-corrected; `nonisolated` to satisfy MainActor-default isolation). The no-camera state
+  offers a prominent "Choose a Photo" — so the sim can now exercise the whole barcode→OFF→log flow via a photo.
+- **Flow** (FoodSearchView): barcode button → scanner → local-cache hit (offline, instant) else OFF lookup →
+  `upsert` (reuse-by-barcode, iOS-17-safe portion) → push LogFoodView; miss → EditFoodView prefilled w/ the GTIN.
+  Online "Open Food Facts" search section appears when the local catalog is thin (debounced/cancellable).
+- **OFF foods** = `source: .openFoodFacts` + barcode; no schema/CloudKit change, so they sync + survive dedup.
+  ODbL attribution in LogFoodView + a Settings credit.
+- **Gotchas found by tests:** (1) float `==` on g→mg conversions → use tolerance; (2) the v2 product endpoint
+  returns the canonical `code` at the TOP level, not inside `product` → decoder now reads `resp.code`.
+- **Verified:** build green (0 warnings in new files); 47 logic tests pass incl. 6 OFF mapping tests.
+  Camera scanning itself is device-only (left to manual).
+
+---
+
+# Task: Phase 3 (start) — Custom foods (2026-06-11)
+
+Plan: `~/.claude/plans/mossy-wondering-lamport.md` (approved). Let users create/edit/delete their own
+foods that flow through the existing search → LogFoodView → diary path. Model is already custom-ready
+(`isCustom`, `FoodSource.custom`, `portions`, keyed `NutrientVector`) → no schema/seed/CloudDedup change.
+
+- [x] Nutrition.swift: `NutrientVector.fromPerServing(_:servingGrams:)` + `perServing(servingGrams:)` (pure, tested)
+- [x] EditFoodView.swift (new): create/edit/delete; clones EditExerciseView + MicronutrientTargetsView grid;
+      per-serving entry, Macros visible + "More nutrients" disclosure; `.keyboardDoneBar()`
+- [x] FoodSearchView: "Create '<term>'" in no-match state + persistent create row → sheet EditFoodView(nil)
+- [x] LogFoodView: pencil → EditFoodView(food) when `food.isCustom`
+- [x] CustomFoodTests: per-serving↔per-100g round-trip + custom survives dedup/purge
+- [x] Build green (iPhone 17 / iOS 26.2 sim, 0 warnings); 41/41 logic tests pass (TEST SUCCEEDED)
+
+## Review (2026-06-11) — Custom foods shipped
+- **New:** `EditFoodView` (create/edit/delete a `.custom` FoodItem), reached from search (no-match
+  "Create '…'" + a persistent create row) and from `LogFoodView` (pencil, customs only). Nutrients are
+  entered per serving (label + grams) and converted to per-100 g; full nutrient depth behind a "More
+  nutrients" disclosure. `.keyboardDoneBar()` (the polish gap the Nutrient-Targets editor still has).
+- **Zero plumbing churn:** model already custom-ready, so no schema/seed/CloudDedup change. Custom foods
+  surface in search via the existing predicate and log via the existing `LogFoodView` with no special-casing.
+- **iOS-17-safe:** portion wired from the to-one side after insert (mirrors `FoodSeedManager.insertPortions`).
+- **Gotcha found:** `NutrientVector()` is zero-filled (8 macro keys), not empty — the `servingGrams <= 0`
+  guard now returns `NutrientVector([:])` so it's genuinely empty (caught by `nonPositiveServingGramsYieldsEmpty`).
+- **Verified:** build green (0 warnings in new files); 6 new tests (5 conversion + 1 model loggable/dedup-safe)
+  pass with the full logic suite. Manual flow (create→log→edit→delete) left to the user.
+
+---
+
 # Task: Food performance at 7,756-catalog scale (2026-06-10)
 
 Symptom: jank searching + adding food after the catalog grew 258 → 7,756. Root causes found via 3 parallel audits.
