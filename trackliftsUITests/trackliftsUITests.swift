@@ -168,6 +168,42 @@ final class trackliftsUITests: XCTestCase {
         snapshot(app, name: "library-bodyweight-tag")
     }
 
+    /// Drives the keyboard-avoidance scroll: builds a multi-exercise workout, focuses
+    /// a middle and the last set field, and screenshots where each card lands so the
+    /// resting position (contentMargins top inset) can be tuned by eye.
+    @MainActor
+    func testKeyboardScrollPosition() throws {
+        let app = XCUIApplication()
+        app.launchArguments += ["--reset-store", "--seed-sample"]
+        app.launch()
+
+        // Open a seeded session (4 exercises × 3 sets) in the workout editor.
+        app.tabBars.buttons["Train"].tap()
+        let session = app.buttons.containing(NSPredicate(format: "label CONTAINS 'Barbell Bench Press'")).firstMatch
+        XCTAssertTrue(session.waitForExistence(timeout: 8), "A seeded session card should be listed")
+        session.tap()
+        XCTAssertTrue(app.navigationBars["Edit Workout"].waitForExistence(timeout: 8),
+                      "Tapping a session should open the workout editor")
+
+        // Focus the FIRST exercise's field (barely scrolls — shows a near-top card).
+        let field = app.textFields.element(boundBy: 1)
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "A set field should be present")
+        field.tap()
+        Thread.sleep(forTimeInterval: 1.5)
+        snapshot(app, name: "kb-scroll-first")
+
+        // Dismiss the keyboard, then focus the 3rd exercise's reps field — a lower card
+        // that must scroll up substantially, so we can see where `.center` lands it.
+        if app.buttons["Done"].exists { app.buttons["Done"].tap() }
+        Thread.sleep(forTimeInterval: 0.5)
+        let reps = app.textFields.matching(identifier: "setReps")
+        let squatReps = reps.element(boundBy: 3) // exercise 2, set 1 (0-2 are Bench's)
+        XCTAssertTrue(squatReps.waitForExistence(timeout: 5), "Second exercise reps field")
+        squatReps.tap()
+        Thread.sleep(forTimeInterval: 1.5)
+        snapshot(app, name: "kb-scroll-lower")
+    }
+
     /// Opens the exercise picker, taps the wanted row (picked to sit near the
     /// top of its section so it's hittable without scrolling — and with no
     /// keyboard up to confuse the nav-bar "Add" button), then confirms.

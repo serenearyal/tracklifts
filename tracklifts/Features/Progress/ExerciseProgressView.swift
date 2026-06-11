@@ -27,7 +27,7 @@ struct ExerciseProgressView: View {
         _metric = State(initialValue: exercise.primaryMetric)
     }
 
-    private var accent: Color { exercise.muscleGroup.color }
+    private var accent: Color { exercise.tag.color }
 
     private var relevantSessions: [WorkoutSession] {
         sessions.filter { session in

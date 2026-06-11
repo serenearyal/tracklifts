@@ -113,8 +113,8 @@ struct SplitEditorView: View {
                 guard let exercise = item.exercise else { return nil }
                 return ReorderableItem(id: item.persistentModelID,
                                        name: exercise.name,
-                                       symbol: exercise.muscleGroup.symbol,
-                                       color: exercise.muscleGroup.color)
+                                       symbol: exercise.tag.symbol,
+                                       color: exercise.tag.color)
             },
             onSave: { ids in
                 withAnimation(.snappy) {
@@ -137,7 +137,7 @@ struct SplitEditorView: View {
                         ExerciseDetailView(exercise: exercise)
                     } label: {
                         HStack(spacing: 12) {
-                            MuscleGlyph(group: exercise.muscleGroup, size: 34)
+                            MuscleGlyph(tag: exercise.tag, size: 34)
                             Text(exercise.name)
                                 .font(.sans(15))
                                 .foregroundStyle(Palette.ink)

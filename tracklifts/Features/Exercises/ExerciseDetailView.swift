@@ -72,10 +72,10 @@ struct ExerciseDetailView: View {
     private var hero: some View {
         let headline = bestHeadline
         return HStack(spacing: 16) {
-            MuscleGlyph(group: exercise.muscleGroup, size: 64)
+            MuscleGlyph(tag: exercise.tag, size: 64)
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
-                    TagChip(text: exercise.muscleGroup.displayName, color: exercise.muscleGroup.color)
+                    TagChip(text: exercise.tag.displayName, color: exercise.tag.color)
                     BodyweightToggleChip(isOn: exercise.isBodyweight, label: "BODYWEIGHT") {
                         exercise.isBodyweight.toggle()
                     }

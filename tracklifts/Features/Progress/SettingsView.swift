@@ -20,11 +20,40 @@ struct SettingsView: View {
     @AppStorage(Profile.didOnboardKey) private var didOnboard = false
 
     @State private var iCloudStatus: CKAccountStatus?
+    @FocusState private var focusedGoal: GoalField?
+
+    private enum GoalField: Hashable { case energy, protein, carbs, fat }
 
     var body: some View {
+        ScrollViewReader { proxy in
+            content
+                .onChange(of: focusedGoal) { _, f in
+                    proxy.scrollFieldToTop(f)
+                }
+        }
+    }
+
+    private var content: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 brandLockup
+
+                VStack(alignment: .leading, spacing: 14) {
+                    SectionLabel(title: "iCloud Sync", systemImage: "icloud.fill")
+                    HStack {
+                        Text(iCloudStatusLabel)
+                            .font(.sans(16, .bold))
+                            .foregroundStyle(iCloudStatusTint)
+                        Spacer()
+                        Image(systemName: iCloudStatusSymbol)
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(iCloudStatusTint)
+                    }
+                    Text(iCloudStatusDetail)
+                        .font(.sans(12))
+                        .foregroundStyle(Palette.inkSecondary)
+                }
+                .cardStyle(padding: 18)
 
                 VStack(alignment: .leading, spacing: 14) {
                     SectionLabel(title: "Units", systemImage: "scalemass.fill")
@@ -94,28 +123,11 @@ struct SettingsView: View {
                         .buttonStyle(.plain)
                     }
                     Rectangle().fill(Palette.hairline).frame(height: 1)
-                    goalRow("Energy", value: $goalEnergy, unit: "kcal")
-                    goalRow("Protein", value: $goalProtein, unit: "g")
-                    goalRow("Carbs", value: $goalCarbs, unit: "g")
-                    goalRow("Fat", value: $goalFat, unit: "g")
+                    goalRow("Energy", value: $goalEnergy, unit: "kcal", focus: .energy)
+                    goalRow("Protein", value: $goalProtein, unit: "g", focus: .protein)
+                    goalRow("Carbs", value: $goalCarbs, unit: "g", focus: .carbs)
+                    goalRow("Fat", value: $goalFat, unit: "g", focus: .fat)
                     Text("Set from your goal during setup. Recalculate to redo it, or fine-tune any value.")
-                        .font(.sans(12))
-                        .foregroundStyle(Palette.inkSecondary)
-                }
-                .cardStyle(padding: 18)
-
-                VStack(alignment: .leading, spacing: 14) {
-                    SectionLabel(title: "iCloud Sync", systemImage: "icloud.fill")
-                    HStack {
-                        Text(iCloudStatusLabel)
-                            .font(.sans(16, .bold))
-                            .foregroundStyle(iCloudStatusTint)
-                        Spacer()
-                        Image(systemName: iCloudStatusSymbol)
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(iCloudStatusTint)
-                    }
-                    Text(iCloudStatusDetail)
                         .font(.sans(12))
                         .foregroundStyle(Palette.inkSecondary)
                 }
@@ -257,12 +269,13 @@ struct SettingsView: View {
         }
     }
 
-    private func goalRow(_ label: String, value: Binding<Double>, unit: String) -> some View {
+    private func goalRow(_ label: String, value: Binding<Double>, unit: String, focus: GoalField) -> some View {
         HStack {
             Text(label).font(.sans(15)).foregroundStyle(Palette.ink)
             Spacer()
             TextField("0", value: value, format: .number)
                 .keyboardType(.decimalPad)
+                .focused($focusedGoal, equals: focus)
                 .multilineTextAlignment(.trailing)
                 .font(.sans(16, .bold)).foregroundStyle(Palette.ink)
                 .frame(width: 72)
@@ -271,5 +284,6 @@ struct SettingsView: View {
             Text(unit).font(.sans(12, .semibold)).foregroundStyle(Palette.inkSecondary)
                 .frame(width: 34, alignment: .leading)
         }
+        .id(focus)
     }
 }

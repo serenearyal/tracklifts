@@ -295,6 +295,7 @@ struct EditDiaryEntrySheet: View {
 
     @State private var grams: Double
     @State private var meal: Meal
+    @FocusState private var gramsFocused: Bool
 
     init(entry: DiaryEntry) {
         self.entry = entry
@@ -309,6 +310,15 @@ struct EditDiaryEntrySheet: View {
     }
 
     var body: some View {
+        ScrollViewReader { proxy in
+            content
+                .onChange(of: gramsFocused) { _, on in
+                    proxy.scrollFieldToTop(on ? "amount" : nil)
+                }
+        }
+    }
+
+    private var content: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
@@ -320,6 +330,7 @@ struct EditDiaryEntrySheet: View {
                     }
 
                     MacroPreview(nutrients: preview)
+                        .id("amount")
 
                     VStack(alignment: .leading, spacing: 14) {
                         SectionLabel(title: "Amount", systemImage: "scalemass")
@@ -329,6 +340,7 @@ struct EditDiaryEntrySheet: View {
                             stepperButton("minus") { grams = max(1, grams - 5) }
                             TextField("0", value: $grams, format: .number)
                                 .keyboardType(.decimalPad)
+                                .focused($gramsFocused)
                                 .multilineTextAlignment(.center)
                                 .font(.sans(17, .bold)).foregroundStyle(Palette.ink)
                                 .frame(width: 70)

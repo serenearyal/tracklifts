@@ -24,8 +24,32 @@ struct LogWorkoutView: View {
     @State private var showingPicker = false
     @State private var showingSplitPicker = false
     @State private var reorderRequest: ReorderRequest?
+    @FocusState private var focusedSet: SetFieldFocus?
 
     var body: some View {
+        ScrollViewReader { proxy in
+            content
+                .onChange(of: focusedSet) { _, _ in
+                    // Defer a runloop so the focus-driven bottom inset (below) is applied
+                    // first — otherwise the last card has nothing beneath it to scroll into
+                    // and clamps partway. `.center` keeps the card's title clear of the
+                    // transparent nav bar (a `.top` landing scrolls it under the bar).
+                    DispatchQueue.main.async { proxy.scrollFieldToTop(focusedEntryID, anchor: .center) }
+                }
+        }
+    }
+
+    /// The exercise-section id that owns the focused set. Scrolling to it lifts the
+    /// whole exercise card (its name header + sets) to the top — so you can see which
+    /// exercise you're logging — rather than burying the header above the focused field.
+    private var focusedEntryID: PersistentIdentifier? {
+        guard let setID = focusedSet?.setID else { return nil }
+        return session.orderedEntries.first { entry in
+            (entry.sets ?? []).contains { $0.persistentModelID == setID }
+        }?.persistentModelID
+    }
+
+    private var content: some View {
         List {
             Section {
                 DatePicker("Date", selection: $session.date, displayedComponents: .date)
@@ -54,6 +78,9 @@ struct LogWorkoutView: View {
             .listRowBackground(Palette.surface)
         }
         .listStyle(.insetGrouped)
+        // While a field is focused, give the list extra bottom room so even the *last*
+        // card can scroll up to a centered position instead of clamping with nothing below.
+        .contentMargins(.bottom, focusedSet != nil ? 500 : 0, for: .scrollContent)
         .scrollContentBackground(.hidden)
         .scrollDismissesKeyboard(.interactively)
         .background(AppBackground())
@@ -100,8 +127,8 @@ struct LogWorkoutView: View {
             items: entries.map { entry in
                 ReorderableItem(id: entry.persistentModelID,
                                 name: entry.exercise?.name ?? "Exercise",
-                                symbol: entry.exercise?.muscleGroup.symbol ?? "dumbbell.fill",
-                                color: entry.exercise?.muscleGroup.color ?? Palette.ember)
+                                symbol: entry.exercise?.tag.symbol ?? "dumbbell.fill",
+                                color: entry.exercise?.tag.color ?? Palette.ember)
             },
             onSave: { ids in
                 withAnimation(.snappy) {
@@ -120,7 +147,7 @@ struct LogWorkoutView: View {
         let bodyweight = entry.exercise?.isBodyweight ?? false
         Section {
             ForEach(entry.orderedSets) { set in
-                SetRow(set: set, unit: unit, isBodyweight: bodyweight)
+                SetRow(set: set, unit: unit, isBodyweight: bodyweight, focus: $focusedSet)
             }
             .onDelete { offsets in deleteSets(offsets, in: entry) }
 
@@ -288,12 +315,26 @@ struct LogWorkoutView: View {
     }
 }
 
+/// Identifies which set field currently holds focus, so the logger can lift the
+/// active row to the top of the screen, clear of the keyboard.
+private enum SetFieldFocus: Hashable {
+    case reps(PersistentIdentifier)
+    case weight(PersistentIdentifier)
+
+    var setID: PersistentIdentifier {
+        switch self {
+        case .reps(let id), .weight(let id): id
+        }
+    }
+}
+
 /// A single editable set row: index, reps, and weight — or, for body-weight
 /// movements, reps plus an optional "+ added" load (0 = pure bodyweight).
 private struct SetRow: View {
     @Bindable var set: LoggedSet
     let unit: WeightUnit
     var isBodyweight: Bool = false
+    var focus: FocusState<SetFieldFocus?>.Binding
 
     var body: some View {
         HStack(spacing: 14) {
@@ -304,6 +345,8 @@ private struct SetRow: View {
                 .background(Palette.ember.opacity(0.14), in: .circle)
 
             field($set.reps, keyboard: .numberPad, width: 56)
+                .focused(focus, equals: .reps(set.persistentModelID))
+                .accessibilityIdentifier("setReps")
             Text("reps").font(.sans(11, .semibold)).foregroundStyle(Palette.inkSecondary)
 
             Spacer()
@@ -313,9 +356,11 @@ private struct SetRow: View {
                     .font(.sans(16, .bold))
                     .foregroundStyle(set.weight > 0 ? Palette.ember : Palette.inkTertiary)
                 fieldDouble($set.weight, width: 58)
+                    .focused(focus, equals: .weight(set.persistentModelID))
                 Text(unit.label).font(.sans(11, .semibold)).foregroundStyle(Palette.inkSecondary)
             } else {
                 fieldDouble($set.weight, width: 68)
+                    .focused(focus, equals: .weight(set.persistentModelID))
                 Text(unit.label).font(.sans(11, .semibold)).foregroundStyle(Palette.inkSecondary)
             }
         }

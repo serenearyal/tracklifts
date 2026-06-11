@@ -32,3 +32,20 @@ enum KeyboardDismiss {
             #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 }
+
+extension ScrollViewProxy {
+    /// Lifts the focused field high in the scroll viewport so it clears the keyboard
+    /// with plenty of visible context (instead of the default "just above the keyboard").
+    /// Call from an `onChange(of:)` on the field's `@FocusState`; `id` is the value given
+    /// to the field's `.id(...)` — often the focus value itself. A nil id (focus cleared)
+    /// is a no-op.
+    ///
+    /// Only `.top` / `.center` / `.bottom` are reliable anchors in `List` (fractional
+    /// `UnitPoint`s silently no-op, and `contentMargins(.top:)` is ignored by `scrollTo`).
+    /// `.top` lands the target under a transparent nav bar; pass `.center` when the target
+    /// is a card whose title must stay clear of the bar.
+    func scrollFieldToTop<ID: Hashable>(_ id: ID?, anchor: UnitPoint = .top) {
+        guard let id else { return }
+        withAnimation(.snappy) { scrollTo(id, anchor: anchor) }
+    }
+}

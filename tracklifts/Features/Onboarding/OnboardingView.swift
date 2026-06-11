@@ -361,10 +361,9 @@ struct OnboardingView: View {
             }
             .scrollIndicators(.hidden)
             .scrollDismissesKeyboard(.interactively)
-            // Keep the focused field above the keyboard.
+            // Lift the focused field to the top of the screen, clear of the keyboard.
             .onChange(of: focusedField) { _, field in
-                guard let field else { return }
-                withAnimation(.snappy) { proxy.scrollTo(field, anchor: .center) }
+                proxy.scrollFieldToTop(field)
             }
             // Reveal the custom-rate control when Custom is picked.
             .onChange(of: pace) { _, p in

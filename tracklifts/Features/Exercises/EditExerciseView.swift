@@ -14,10 +14,14 @@ struct EditExerciseView: View {
 
     var exercise: Exercise?
 
+    @Query(sort: \Exercise.name) private var allExercises: [Exercise]
+
     @State private var name = ""
-    @State private var group: MuscleGroup = .chest
+    @State private var groupRaw: String = MuscleGroup.chest.rawValue
     @State private var notes = ""
     @State private var isBodyweight = false
+    @State private var showingCustomAlert = false
+    @State private var customName = ""
 
     private var isEditing: Bool { exercise != nil }
     private var canSave: Bool { !name.trimmingCharacters(in: .whitespaces).isEmpty }
@@ -31,13 +35,22 @@ struct EditExerciseView: View {
                 .listRowBackground(Palette.surface)
 
                 Section {
-                    Picker("Muscle Group", selection: $group) {
-                        ForEach(MuscleGroup.allCases) { g in
-                            Label(g.displayName, systemImage: g.symbol).tag(g)
+                    Picker("Muscle Group", selection: $groupRaw) {
+                        ForEach(pickerTags) { tag in
+                            Label(tag.displayName, systemImage: tag.symbol).tag(tag.raw)
                         }
                     }
                     .pickerStyle(.navigationLink)
                     .font(.sans(15))
+
+                    Button {
+                        customName = ""
+                        showingCustomAlert = true
+                    } label: {
+                        Label("Add Custom Group", systemImage: "plus.circle")
+                            .font(.sans(15, .semibold))
+                            .foregroundStyle(Palette.ember)
+                    }
                 } header: { fieldLabel("Muscle Group") }
                 .listRowBackground(Palette.surface)
 
@@ -75,7 +88,37 @@ struct EditExerciseView: View {
                 }
             }
             .onAppear(perform: load)
+            .alert("New Muscle Group", isPresented: $showingCustomAlert) {
+                TextField("e.g. Glutes", text: $customName)
+                    .textInputAutocapitalization(.words)
+                Button("Add") { addCustomGroup() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Name a muscle group to organize this exercise under.")
+            }
         }
+    }
+
+    /// Built-in groups + any custom groups already in the library + the current
+    /// selection (so a just-typed custom name shows as selected), de-duplicated.
+    private var pickerTags: [MuscleTag] {
+        var tags = MuscleGroup.allCases.map { MuscleTag($0) }
+        var seen = Set(tags.map(\.raw))
+        let customs = (allExercises.map(\.muscleGroupRaw) + [groupRaw])
+            .map { MuscleTag(raw: $0) }
+            .filter(\.isCustom)
+            .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+        for tag in customs where seen.insert(tag.raw).inserted {
+            tags.append(tag)
+        }
+        return tags
+    }
+
+    private func addCustomGroup() {
+        guard let canonical = MuscleTag.canonicalRaw(forInput: customName) else { return }
+        // Reuse an existing built-in/custom group that matches case-insensitively.
+        let existing = pickerTags.first { $0.raw.lowercased() == canonical.lowercased() }
+        groupRaw = existing?.raw ?? canonical
     }
 
     private func fieldLabel(_ text: String) -> some View {
@@ -87,7 +130,7 @@ struct EditExerciseView: View {
     private func load() {
         guard let exercise else { return }
         name = exercise.name
-        group = exercise.muscleGroup
+        groupRaw = exercise.muscleGroupRaw
         notes = exercise.notes
         isBodyweight = exercise.isBodyweight
     }
@@ -96,12 +139,14 @@ struct EditExerciseView: View {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         if let exercise {
             exercise.name = trimmed
-            exercise.muscleGroup = group
+            exercise.muscleGroupRaw = groupRaw
             exercise.notes = notes
             exercise.isBodyweight = isBodyweight
         } else {
-            context.insert(Exercise(name: trimmed, muscleGroup: group, isCustom: true,
-                                    isBodyweight: isBodyweight, notes: notes))
+            let new = Exercise(name: trimmed, muscleGroup: .chest, isCustom: true,
+                               isBodyweight: isBodyweight, notes: notes)
+            new.muscleGroupRaw = groupRaw
+            context.insert(new)
         }
         dismiss()
     }

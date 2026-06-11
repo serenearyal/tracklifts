@@ -193,7 +193,7 @@ struct ProgressOverviewView: View {
                 .font(.display(26))
                 .foregroundStyle(rank == 1 ? Palette.gold : Palette.inkTertiary)
                 .frame(width: 32)
-            MuscleGlyph(group: exercise.muscleGroup, size: 40)
+            MuscleGlyph(tag: exercise.tag, size: 40)
             VStack(alignment: .leading, spacing: 2) {
                 Text(exercise.name)
                     .font(.sans(15, .semibold))
@@ -344,7 +344,7 @@ struct ExerciseTrendCard: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            MuscleGlyph(group: exercise.muscleGroup, size: 40)
+            MuscleGlyph(tag: exercise.tag, size: 40)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Text(exercise.name)
@@ -361,7 +361,7 @@ struct ExerciseTrendCard: View {
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
                         Text(formattedValue(latest))
                             .font(.display(26))
-                            .foregroundStyle(exercise.muscleGroup.color)
+                            .foregroundStyle(exercise.tag.color)
                         Text(valueUnit)
                             .font(.sans(10, .semibold))
                             .foregroundStyle(Palette.inkSecondary)
@@ -380,11 +380,11 @@ struct ExerciseTrendCard: View {
                 Chart(points) { point in
                     AreaMark(x: .value("Date", point.date), y: .value("1RM", point.value))
                         .foregroundStyle(.linearGradient(
-                            colors: [exercise.muscleGroup.color.opacity(0.35), .clear],
+                            colors: [exercise.tag.color.opacity(0.35), .clear],
                             startPoint: .top, endPoint: .bottom))
                         .interpolationMethod(.catmullRom)
                     LineMark(x: .value("Date", point.date), y: .value("1RM", point.value))
-                        .foregroundStyle(exercise.muscleGroup.color)
+                        .foregroundStyle(exercise.tag.color)
                         .interpolationMethod(.catmullRom)
                         .lineStyle(StrokeStyle(lineWidth: 2))
                 }

@@ -96,22 +96,27 @@ struct SectionLabel: View {
 // MARK: - Muscle badge & chips
 
 struct MuscleGlyph: View {
-    let group: MuscleGroup
+    let tag: MuscleTag
     var size: CGFloat = 44
 
+    init(tag: MuscleTag, size: CGFloat = 44) {
+        self.tag = tag
+        self.size = size
+    }
+
     var body: some View {
-        Image(systemName: group.symbol)
+        Image(systemName: tag.symbol)
             .font(.system(size: size * 0.42, weight: .bold))
-            .foregroundStyle(group.color)
+            .foregroundStyle(tag.color)
             .frame(width: size, height: size)
             .background(
-                LinearGradient(colors: [group.color.opacity(0.28), group.color.opacity(0.10)],
+                LinearGradient(colors: [tag.color.opacity(0.28), tag.color.opacity(0.10)],
                                startPoint: .topLeading, endPoint: .bottomTrailing),
                 in: .rect(cornerRadius: size * 0.30)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: size * 0.30)
-                    .strokeBorder(group.color.opacity(0.35), lineWidth: 1)
+                    .strokeBorder(tag.color.opacity(0.35), lineWidth: 1)
             )
     }
 }

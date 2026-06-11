@@ -51,4 +51,8 @@ final class Exercise {
         get { MuscleGroup(rawValue: muscleGroupRaw) ?? .chest }
         set { muscleGroupRaw = newValue.rawValue }
     }
+
+    /// Display lens over `muscleGroupRaw` that resolves built-in *and* custom groups.
+    /// Prefer this over `muscleGroup` for any UI (glyphs, names, colors, grouping).
+    var tag: MuscleTag { MuscleTag(raw: muscleGroupRaw) }
 }

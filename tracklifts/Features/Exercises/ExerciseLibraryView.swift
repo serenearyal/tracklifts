@@ -14,23 +14,27 @@ struct ExerciseLibraryView: View {
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
 
     @State private var searchText = ""
-    @State private var selectedGroup: MuscleGroup?
+    @State private var selectedRaw: String?
     @State private var favoritesOnly = false
     @State private var showingAdd = false
 
     private var filtered: [Exercise] {
         exercises.filter { ex in
             (!favoritesOnly || ex.isFavorite)
-            && (selectedGroup == nil || ex.muscleGroup == selectedGroup)
+            && (selectedRaw == nil || ex.muscleGroupRaw == selectedRaw)
             && (searchText.isEmpty || ex.name.localizedCaseInsensitiveContains(searchText))
         }
     }
 
-    private var sections: [(group: MuscleGroup, items: [Exercise])] {
-        MuscleGroup.allCases.compactMap { group in
-            let items = filtered.filter { $0.muscleGroup == group }
-            return items.isEmpty ? nil : (group, items)
+    private var sections: [(tag: MuscleTag, items: [Exercise])] {
+        filtered.muscleTagsPresent.map { tag in
+            (tag, filtered.filter { $0.muscleGroupRaw == tag.raw })
         }
+    }
+
+    /// Built-in groups (always shown) plus any custom groups in the library.
+    private var filterTags: [MuscleTag] {
+        MuscleGroup.allCases.map { MuscleTag($0) } + exercises.muscleTagsPresent.filter(\.isCustom)
     }
 
     var body: some View {
@@ -58,10 +62,10 @@ struct ExerciseLibraryView: View {
                         .frame(maxWidth: .infinity).padding(.top, 30)
                 }
 
-                ForEach(sections, id: \.group) { section in
+                ForEach(sections, id: \.tag) { section in
                     HStack(spacing: 8) {
-                        Circle().fill(section.group.color).frame(width: 7, height: 7)
-                        Text(section.group.displayName.uppercased())
+                        Circle().fill(section.tag.color).frame(width: 7, height: 7)
+                        Text(section.tag.displayName.uppercased())
                             .font(.sans(12, .bold)).tracking(1.5)
                             .foregroundStyle(Palette.inkSecondary)
                     }
@@ -128,14 +132,14 @@ struct ExerciseLibraryView: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    Button { selectedGroup = nil } label: {
-                        TagChip(text: "All", color: Palette.inkSecondary, filled: selectedGroup == nil)
+                    Button { selectedRaw = nil } label: {
+                        TagChip(text: "All", color: Palette.inkSecondary, filled: selectedRaw == nil)
                     }.buttonStyle(.plain)
-                    ForEach(MuscleGroup.allCases) { group in
+                    ForEach(filterTags) { tag in
                         Button {
-                            selectedGroup = (selectedGroup == group) ? nil : group
+                            selectedRaw = (selectedRaw == tag.raw) ? nil : tag.raw
                         } label: {
-                            TagChip(text: group.displayName, color: group.color, filled: selectedGroup == group)
+                            TagChip(text: tag.displayName, color: tag.color, filled: selectedRaw == tag.raw)
                         }.buttonStyle(.plain)
                     }
                 }
@@ -149,14 +153,14 @@ struct ExerciseRow: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            MuscleGlyph(group: exercise.muscleGroup, size: 46)
+            MuscleGlyph(tag: exercise.tag, size: 46)
             VStack(alignment: .leading, spacing: 3) {
                 Text(exercise.name)
                     .font(.sans(16, .semibold))
                     .foregroundStyle(Palette.ink)
                     .multilineTextAlignment(.leading)
                 HStack(spacing: 6) {
-                    Text(exercise.muscleGroup.displayName.uppercased())
+                    Text(exercise.tag.displayName.uppercased())
                         .font(.sans(11, .semibold)).tracking(1)
                         .foregroundStyle(Palette.inkSecondary)
                     if exercise.isBodyweight {
