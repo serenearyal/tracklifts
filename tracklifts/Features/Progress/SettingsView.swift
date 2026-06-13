@@ -20,6 +20,7 @@ struct SettingsView: View {
     @AppStorage(WaterGoals.unitKey) private var waterUnitRaw = WaterUnit.ml.rawValue
     @AppStorage(Profile.goalKey) private var goalRaw = FitnessGoal.maintain.rawValue
     @AppStorage(Profile.didOnboardKey) private var didOnboard = false
+    @AppStorage("photoAICloudEnabled") private var photoAICloud = false
 
     @Environment(\.modelContext) private var context
     @ObservedObject private var health = HealthKitManager.shared
@@ -85,6 +86,18 @@ struct SettingsView: View {
                     }
                     .cardStyle(padding: 18)
                 }
+
+                VStack(alignment: .leading, spacing: 14) {
+                    SectionLabel(title: "Photo Capture", systemImage: "camera.fill")
+                    Toggle(isOn: $photoAICloud) {
+                        Text("Cloud photo recognition")
+                            .font(.sans(15, .semibold)).foregroundStyle(Palette.ink)
+                    }
+                    .tint(Palette.ember)
+                    Text("When on, a meal photo is sent to Google Gemini to identify foods. Typed and voice capture always stay on your device.")
+                        .font(.sans(12)).foregroundStyle(Palette.inkSecondary)
+                }
+                .cardStyle(padding: 18)
 
                 VStack(alignment: .leading, spacing: 14) {
                     SectionLabel(title: "Units", systemImage: "scalemass.fill")

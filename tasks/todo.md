@@ -1,3 +1,70 @@
+# Task: Phase 4 — Capture magic (typed + voice + photo) (2026-06-11)
+
+Plan: `~/.claude/plans/idempotent-dazzling-lovelace.md` (approved). One pipeline, three front-ends → a
+shared review-and-confirm step. **Decisions:** text/voice parse = on-device heuristic (offline, Principle 3);
+photo = cloud Gemini behind an opt-in (D2). iOS-17 floor has no on-device LLM, so heuristic not Foundation Models.
+
+## Slice 1 — Pipeline core (logic, tested first)
+- [x] `Data/MealTextParser.swift`: `ParsedItem` + heuristic `parse` (segment on commas/and/with; quantity as digits/fractions/written/fused "200g"; unit synonyms; drop fillers)
+- [x] `Data/CaptureMatcher.swift`: `CaptureMatch` + `match` (FoodSearch best hit) + pure `resolveGrams` (hint → mass/volume table → food portion → default×qty)
+- [x] `MealTextParserTests` + `CaptureMatcherTests` (hermetic, 12 tests); build + tests green
+
+## Slice 2 — Confirm sheet + typed capture
+- [x] `Features/Capture/CaptureConfirmSheet.swift`: editable rows (swap food via `CaptureFoodPicker`, tweak grams, remove), MacroPreview totals, pinned meal-picker + "Add all" → one DiaryEntry per matched row (copies `logSavedMeal`)
+- [x] `Features/Capture/CaptureView.swift`: text entry → parse → match → push confirm
+- [x] Camera "Snap Meal" entries on `TodayView` (Nutrition header) + `FoodDiaryView` (beside search) + `.sheet` _(later reshaped to camera-first; see below)_
+- [x] Build green (fixed a `compactMap(method)` main-actor warning → explicit closure); logic tests green
+
+## Slice 3 — Voice
+- [x] `Features/Capture/SpeechCapture.swift`: `SFSpeechRecognizer` (`requiresOnDeviceRecognition`) + `AVAudioEngine` + mic/speech auth
+- [x] mic button in `CaptureView` (transcript → same parser); `project.pbxproj` mic + speech usage strings (both app configs)
+- [x] Build green (no concurrency warnings)
+
+## Slice 4 — Photo (Gemini, opt-in)
+- [x] `Data/FoodVisionProvider.swift`: `FoodVisionProvider` + `GeminiFoodVision` (gemini-3.1-flash-lite, `responseMimeType` JSON) + `GeminiConfig` (env / `Secrets.plist`)
+- [x] PhotosPicker photo button behind `photoAICloudEnabled` opt-in (first-use dialog + Settings toggle); ~1024px JPEG to cap cost
+- [x] `.gitignore` `Secrets.plist` + committed `Secrets.example.plist`
+- [x] Build green (full phase, 0 concurrency warnings)
+
+## Review (2026-06-11)
+- **One pipeline, three inputs.** Text, voice transcript, and photo all reduce to `[ParsedItem]` → `CaptureMatcher` → `CaptureConfirmList` → existing DiaryEntry commit. Nutrients always come from the matched catalog food (Principle 2) — the parser/model only proposes name + portion.
+- **Offline-correct on iOS 17.** No on-device LLM at the 17.0 floor, so text/voice use a rule-based parser + `SFSpeechRecognizer`; only photo (which needs the model) leaves the device, behind an explicit opt-in (Settings toggle). Principle 3 intact.
+- **Verified:** build green after every slice (0 concurrency warnings); +12 hermetic tests pass. Live mic + camera are device-only (sim has neither) — left to you. Photo needs a Gemini key (`Secrets.plist` or `GEMINI_API_KEY` env), else it shows a disabled state.
+- **Not committed yet** (per the no-auto-commit rule).
+
+## UX polish (2026-06-12)
+- **Camera-first capture:** `MealCameraPicker` (UIImagePickerController `.camera`) → primary "Take a Photo";
+  gallery as the secondary, sim falls back to gallery (mirrors the barcode scanner). Capture sheet reordered
+  photo-first; smoothed opt-in (Enable → opens camera/gallery directly).
+- **Explicit, prominent entries:** ✨ → a camera "Snap Meal" pill on Today + a camera button beside the Food
+  tab's search bar. Broadened `NSCameraUsageDescription` to mention meals.
+- **`PhotoStatusOverlay` (the big one):** replaces the bland spinner + tiny red error. While Gemini runs, a
+  **vision-scan** over the captured photo (sweeping ember beam, viewfinder corner brackets, frosted status card
+  cycling "Identifying foods → Estimating portions…", shimmer bar), cancellable. On failure, a **tailored
+  recovery screen** distinguishing **no-food** / **unreadable** / **no-key**, each with a Bebas headline, helpful
+  copy, and real CTAs (Retake / Gallery / Try Again / **type it instead**). Retry re-runs the same image; the
+  in-flight task is cancelled on close. Build green, 0 concurrency warnings.
+- **Overlay overflow fix:** the status/failure cards were full-bleed (`.frame(maxWidth: .infinity)`) and clipped
+  text off-screen. **Actual fix:** cap the cards at a centered `cardMaxWidth = 320` (+ 16pt horizontal floor) so
+  they sit inside the screen with side margins, not edge-to-edge. Backstops also added: `...DynamicTypeSize.xLarge`
+  clamp, `lineLimit` + `minimumScaleFactor` on status phrase / headline / secondary buttons + shared `EmberButton`,
+  smaller bases (headline 34→30, icon 86→76, less tracking), shorter "Choose Another Photo" → "Choose Photo".
+  Build green. _(Clamp + shrink-to-fit alone did not resolve it — the width cap was the fix.)_
+
+## Phase 4.1 — photo nutrition estimation for unknown foods (2026-06-12)
+- **Problem:** a photographed food not in the catalog (a glazed donut) was a red "no match" dead-end — unloggable.
+- [x] `ParsedItem.estimatedPer100g: NutrientVector?` — one optional field, photo-only (heuristic leaves it nil).
+- [x] `FoodVisionProvider`: Gemini prompt now also returns each item's TOTAL nutrition (energy + 8 label macros,
+  "always estimate even for foods in no database"); `decodeItems` → per-100 g via `NutrientVector.fromPerServing`.
+- [x] `CaptureMatcher`: no catalog hit + estimate → build an **un-inserted** custom `FoodItem` (`isEstimated`),
+  loggable with full macros; catalog match still wins; `gramsHint` keeps it off the un-inserted `portions`.
+- [x] `CaptureConfirmSheet`: **"Estimated"** pill (sparkles, editable); `commit()` persists the food + a
+  "1 serving" portion (reusable/searchable, re-photo re-matches); `changeFood` clears the flag on swap.
+- [x] +2 hermetic `CaptureMatcherTests` (round-trip + catalog precedence); **71 passed / 0 failed**, build green.
+- _Out of scope: micronutrient estimates; fuzzy dedup of differently-named estimates._
+
+---
+
 # Task: Phase 3 (finish) — Water + Saved Meals + Recipes (2026-06-11)
 
 Plan: `~/.claude/plans/mossy-wondering-lamport.md` (approved). Finishes Phase 3 — cover the long tail so

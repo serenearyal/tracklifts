@@ -39,6 +39,7 @@ struct FoodDiaryView: View {
 
     @State private var day: Date = Calendar.current.startOfDay(for: .now)
     @State private var sheet: FoodSheet?
+    @State private var showingCapture = false
 
     private var dayEntries: [DiaryEntry] {
         allEntries.filter { Calendar.current.isDate($0.date, inSameDayAs: day) }
@@ -59,7 +60,7 @@ struct FoodDiaryView: View {
             List {
                 Section {
                     dateNav.diaryRow(top: 8, bottom: 2)
-                    searchBar.diaryRow(top: 4, bottom: 2)
+                    searchRow.diaryRow(top: 4, bottom: 2)
                     summaryCard(total: total).diaryRow(top: 6, bottom: 2)
                     waterCard.diaryRow(top: 2, bottom: 2)
                     microLink(total: total).diaryRow(top: 2, bottom: 2)
@@ -83,6 +84,25 @@ struct FoodDiaryView: View {
                 case .saveMeal(let meal): SaveMealSheet(defaultName: meal.label, entries: entries(for: meal))
                 }
             }
+            .sheet(isPresented: $showingCapture) { CaptureView(day: day) }
+        }
+    }
+
+    /// The catalog search field plus a prominent camera button — snap/describe a meal.
+    private var searchRow: some View {
+        HStack(spacing: 10) {
+            searchBar
+            Button { showingCapture = true } label: {
+                Image(systemName: "camera.fill")
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(.black)
+                    .frame(width: 48, height: 48)
+                    .background(Grad.ember, in: .rect(cornerRadius: 14))
+                    .shadow(color: Palette.ember.opacity(0.45), radius: 8, y: 3)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Snap a meal")
+            .accessibilityIdentifier("captureButtonFood")
         }
     }
 

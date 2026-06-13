@@ -38,3 +38,12 @@ Carthage/Build/
 
 # USDA FoodData Central raw download (regenerate FoodCatalog.json via tools/usda-import.swift)
 FoodData_Central_*/
+
+# Gemini API key for Phase 4 photo capture — keep real secrets out of git.
+# Copy Secrets.example.plist → tracklifts/Secrets.plist and add your key
+# (or set GEMINI_API_KEY in the scheme's environment for simulator runs).
+tracklifts/Secrets.plist
+Secrets.plist
+# The shared scheme carries a GEMINI_API_KEY env var (a real secret). Keep it out
+# of git; strip the key from Run > Environment first if you want to share it.
+tracklifts.xcodeproj/xcshareddata/xcschemes/tracklifts.xcscheme

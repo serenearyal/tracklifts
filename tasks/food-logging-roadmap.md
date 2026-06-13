@@ -15,8 +15,9 @@ generated from the **full USDA SR-Legacy (7,756 foods, ~32-nutrient panels)** an
 sim (7,756 `FoodItem`s, micros present); a **Nutrition Facts** breakdown now shows in the log + edit
 sheets (not just macros). _Commit the 7.3 MB JSON to ship it; the raw FDC CSVs are gitignored._
 **Phase 3 shipped:** ✅ custom foods, ✅ barcode scan + Open Food Facts (lookup + online branded search, cache,
-ODbL), ✅ recipes, ✅ saved meals, ✅ water. **Next: Phase 4 — capture magic (voice → photo).** Remaining
-Phase 1 polish: true FTS.
+ODbL), ✅ recipes, ✅ saved meals, ✅ water. **Phase 4 shipped:** ✅ natural-language quick-add + ✅ voice
+(both on-device — heuristic parser, no LLM), ✅ photo (cloud Gemini, opt-in), unified capture sheet on Today.
+**Next: Phase 5 — energy balance + correlations.** Remaining Phase 1 polish: true FTS.
 
 ---
 
@@ -57,9 +58,14 @@ Phase 1 polish: true FTS.
 - **D1 — Data source:** ✅ RESOLVED — bundled a curated **258-food Swift catalog** (whole + common
   foods, per-100 g macros + portions) for the offline engine. Full USDA→SQLite import + Open Food
   Facts online expansion = deferred follow-up.
-- **D2 — Photo AI (needed for Phase 4):** strictly offline (skip/limit photo, or paid on-device
-  SDK like Passio) vs. cloud Claude-vision opt-in (best accuracy). Voice stays on-device either
-  way. → _TBD_
+- **D2 — Photo AI (needed for Phase 4):** ✅ RESOLVED — **cloud Gemini-class multimodal**
+  (e.g. Gemini Flash): cheapest multimodal value, and being cloud it runs on **any iOS version**,
+  sidestepping the iOS-17 floor that blocks on-device models (Foundation Models / SpeechAnalyzer
+  are iOS 26+). Behind an explicit **opt-in** (Principle 3); the model only returns
+  `[{foodName, estimatedGrams, confidence}]` to match against our DB (Principle 2 — never invents
+  nutrients). Voice + NL quick-add stay on-device. _Impl: keep the API key off the client — proxy
+  via a tiny backend (or accept the risk on personal/dev builds). A `FoodProvider`-style adapter
+  keeps the vision model swappable._
 
 ## Data model reference (mirror existing `@Model` conventions: default values on every
 ## property, enums as raw strings + computed accessor, `createdAt`, cascade relationships)
@@ -176,21 +182,37 @@ awaiting the USDA data import (offline, user-run) + a device pass for HealthKit.
 
 ---
 
-## Phase 4 — Capture magic: voice, then photo  ⬜
+## Phase 4 — Capture magic: voice, then photo  ✅
 
-**Goal:** the "wow" input modes — both funneling into the Phase 1 engine. (Resolve **D2** before photo.)
+**Goal:** the "wow" input modes — all funneling into the Phase 1 engine. (**D2** resolved: cloud Gemini-class multimodal for photo.)
+
+**iOS-17 adaptation:** the original sketch assumed an iOS-26 on-device LLM (`SpeechAnalyzer` +
+Foundation Models `@Generable`). The app targets **iOS 17**, which has neither — so text/voice parsing
+is a **rule-based on-device parser** (`MealTextParser`), and speech is **`SFSpeechRecognizer`**
+(`requiresOnDeviceRecognition`). Still fully offline, still honors Principle 3; the confirm sheet
+absorbs any parse imperfection. Photo goes to the cloud (Gemini) precisely because it needs the model.
 
 **Build**
-- [ ] **Voice (on-device):** `SpeechAnalyzer/SpeechTranscriber` → transcript → parse with
-      Foundation Models (`@Generable` → `[{food, qty, unit}]`) → fuzzy-match to DB → confirm sheet.
-- [ ] Natural-language quick-add ("a bowl of oatmeal with blueberries") sharing the same parser.
-- [ ] **Photo:** image → multimodal model → `[{foodName, estimatedGrams, confidence}]` → match
-      each to a DB food (micros come from the DB) → confirm portions. Cloud path behind explicit
-      opt-in (or on-device SDK per D2).
-- [ ] Unified capture sheet: segmented **Search / Scan / Photo / Voice**, all ending at one
-      confirmation step.
+- [x] **Voice (on-device):** `SFSpeechRecognizer` (`Features/Capture/SpeechCapture.swift`) → transcript →
+      `MealTextParser` → `CaptureMatcher` → confirm sheet. _(device-only to verify — sim has no mic.)_
+- [x] **Natural-language quick-add** ("a cup of oatmeal with blueberries, 200g chicken") → `MealTextParser`
+      (`Data/MealTextParser.swift`: segment → quantity/unit/name) → same matcher/confirm. Hermetic tests.
+- [x] **Photo:** image → **cloud Gemini** (`Data/FoodVisionProvider.swift`, `gemini-3.1-flash-lite`, JSON out) →
+      `[{name, qty, unit, grams}]` → match each to a DB food (nutrients from the DB) → confirm. Behind an
+      explicit **opt-in** (`photoAICloudEnabled`, toggle in Settings); iOS-17-safe (cloud, no on-device gate).
+- [x] **Photo nutrition estimation (Phase 4.1):** when a recognized food isn't in the catalog (e.g. a glazed
+      donut), Gemini also returns the item's TOTAL nutrition; `CaptureMatcher` builds an un-inserted custom
+      `FoodItem` from it (via `NutrientVector.fromPerServing`) so it's loggable with full macros. The confirm
+      row shows an **"Estimated"** pill; on commit the food is persisted (reusable/searchable). Estimation is
+      **photo-only** — text/voice stay on-device and never invent numbers (a scoped relaxation of Principle 2).
+- [x] **Match + commit** shared by all modes: `CaptureMatcher.match` (`FoodSearch` + unit→grams) →
+      `CaptureConfirmList` (editable rows, swap match, tweak grams, pick meal) → one `DiaryEntry` per row.
+- [x] **Unified capture sheet** (`Features/Capture/CaptureView.swift`) — **camera-first**: snap a photo
+      (`MealCameraPicker`, `UIImagePickerController`) or pick from gallery, or type / speak; all end at the
+      one confirmation step. Opened from a **camera button** on Today ("Snap Meal" pill) **and** the Food
+      tab (beside the search bar).
 
-**Done when:** a user can log a meal by talking to the app fully offline, and (opt-in) by photo.
+**Done when:** ✅ a user can log a meal by typing or speaking to the app fully offline, and (opt-in) by photo.
 
 ---
 
@@ -280,3 +302,34 @@ pure food app can.
   extracted (Data/FoodSearch.swift). **5 new @Model types = additive CloudKit schema → redeploy Dev→Prod before
   the next TestFlight** (no migration code). Build green every slice; **57/57** logic tests pass (10 new:
   4 water + 2 saved-meal + 4 recipe). **Next: Phase 4 (voice → photo capture).**
+- _2026-06-11_ — **D2 resolved (photo AI): cloud Gemini-class multimodal** (e.g. Gemini Flash) for
+  photo recognition — cheapest multimodal value, and cloud-based so it runs on any iOS version
+  (sidesteps the iOS-17 floor that gates on-device Foundation Models, so the *photo* path isn't
+  availability-blocked; voice/NL quick-add stay on-device and still need an iOS-26 path or
+  fallback). Stays behind an explicit opt-in; the model only proposes food + portion estimates
+  matched against the curated DB (never invents nutrients). Open: API-key handling (proxy vs.
+  embedded) + the voice-path iOS-floor question remain.
+- _2026-06-11_ — **Phase 4 shipped (capture magic).** One pipeline, three front-ends, all funneling into
+  a shared review-and-confirm step that commits one `DiaryEntry` per item. **Text/voice = on-device,
+  no LLM:** `MealTextParser` (segment on commas/and/with; parse quantity as digits/fractions/written
+  words/fused "200g"; normalize unit synonyms; drop fillers) → `CaptureMatcher` (`FoodSearch` best hit +
+  unit→grams via portion-override/mass-volume table/default). Voice via `SFSpeechRecognizer`
+  (`requiresOnDeviceRecognition`, mic+speech usage strings). **Photo = cloud Gemini** (`gemini-2.5-flash`,
+  `gemini-3.1-flash-lite`, `responseMimeType: application/json`) behind a `photoAICloudEnabled` opt-in (Settings toggle + first-use
+  dialog), key from `GEMINI_API_KEY` env or gitignored `Secrets.plist`, ~1024px JPEG to cap cost. **Camera-first**
+  capture (`MealCameraPicker` + gallery fallback) reached via a **camera button** on Today + the Food tab →
+  `CaptureView` → `CaptureConfirmList`. **iOS-17 reality check:**
+  the planned iOS-26 `SpeechAnalyzer` + Foundation Models don't exist on the 17.0 floor, so the heuristic
+  parser is the offline-correct substitute (Principle 3 intact). Build green; **+12 hermetic tests**
+  (`MealTextParserTests`, `CaptureMatcherTests`). _Device-only to verify: live mic, camera capture._
+  _Out of scope: backend key proxy; per-row meal override._
+- _2026-06-12_ — **Phase 4.1: photo nutrition estimation for unknown foods.** Photographed foods that
+  aren't in the catalog (a glazed donut) were a red "no match" dead-end; now Gemini also returns each
+  item's TOTAL nutrition (energy + 8 label macros, "always estimate even for foods in no database"),
+  and `CaptureMatcher` materializes an **un-inserted custom `FoodItem`** from it via the existing
+  `NutrientVector.fromPerServing` — so the row logs with full macros. One new optional
+  `ParsedItem.estimatedPer100g` threads it through; the confirm sheet badges the row **"Estimated"**
+  (`sparkles`, editable) and `commit()` persists the food (+ a "1 serving" portion) so it becomes
+  searchable/re-loggable and a re-photo re-matches it. Photo-only — text/voice never estimate (scoped
+  relaxation of Principle 2). Build green; **+2 hermetic tests** (round-trip + catalog-precedence),
+  full suite **71 passed / 0 failed**. _Out of scope: micronutrient estimates; fuzzy estimate dedup._

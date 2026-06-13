@@ -304,6 +304,8 @@ struct EmberButton: View {
                 Text(title.uppercased())
                     .font(.sans(15, .bold))
                     .tracking(1)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
             }
             .foregroundStyle(.black)
             .frame(maxWidth: .infinity)

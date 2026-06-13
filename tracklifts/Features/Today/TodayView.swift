@@ -27,6 +27,7 @@ struct TodayView: View {
 
     @State private var editingSession: WorkoutSession?
     @State private var showingFoodSearch = false
+    @State private var showingCapture = false
     @State private var showingAddWeight = false
 
     // MARK: - Derived (calendar filters aren't #Predicate-expressible; filter in memory)
@@ -77,6 +78,9 @@ struct TodayView: View {
             .sheet(isPresented: $showingFoodSearch) {
                 FoodSearchView(meal: .defaultForNow, day: .now)
             }
+            .sheet(isPresented: $showingCapture) {
+                CaptureView(day: .now)
+            }
             .sheet(isPresented: $showingAddWeight) {
                 AddBodyWeightSheet(defaultWeight: latestWeight, unit: unit)
             }
@@ -115,6 +119,7 @@ struct TodayView: View {
             HStack {
                 SectionLabel(title: "Nutrition", systemImage: "fork.knife")
                 Spacer()
+                captureButton
                 quickAdd("Add Food") { showingFoodSearch = true }
             }
             Button { selectedTab = .food } label: {
@@ -231,6 +236,23 @@ struct TodayView: View {
     }
 
     // MARK: - Bits
+
+    /// Prominent camera pill — opens the capture sheet (snap a photo / type / speak).
+    private var captureButton: some View {
+        Button { showingCapture = true } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "camera.fill").font(.system(size: 12, weight: .bold))
+                Text("Snap Meal").font(.sans(12, .bold)).tracking(0.5)
+            }
+            .foregroundStyle(.black)
+            .padding(.horizontal, 12).padding(.vertical, 7)
+            .background(Grad.ember, in: .capsule)
+            .shadow(color: Palette.ember.opacity(0.45), radius: 8, y: 3)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Capture a meal")
+        .accessibilityIdentifier("captureButton")
+    }
 
     /// Small ember circle in a section row — the card's quick action.
     private func quickAdd(_ label: String, action: @escaping () -> Void) -> some View {
