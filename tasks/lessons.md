@@ -59,3 +59,43 @@ position-tuning bugs, a build proves nothing; capture a screenshot via XCUITest 
 `xcresulttool export attachments` and actually look. (Also: the exercise picker is a
 lazy `List`, so off-screen rows/fields aren't queryable — seed data and open an existing
 session instead of driving the picker.)
+
+## 2026-06-15 — Don't trust fuzzy DB name-matching for AI-proposed foods; cross-check density
+
+**What happened:** A photographed coffee logged as "Alcoholic beverage, liqueur,
+coffee". The note→Gemini path was fine; `CaptureMatcher` was catalog-first and took
+`FoodSearch.run(name, limit: 8).first` with no confidence check. USDA names defeat that
+three ways at once: no entry's name starts with "coffee" (every hit ties at word-prefix
+rank, broken *alphabetically* → "Alcoholic…" wins), the limit-8 fetch is sorted
+alphabetically *before* ranking so the real coffee rows are cut off, and because *a* hit
+existed it discarded the model's own coffee estimate. I checked the catalog directly:
+"smarter ranking" doesn't save it — relevance ranking confidently returns "SILK Coffee,
+soymilk" for coffee and "Rice flour, white" for white rice.
+
+**Rule:** When an LLM proposes a food *and its own nutrition*, treat the AI estimate as
+the default and only upgrade to a catalog row on a **confident** match — name coverage
+(every query token present, query accounts for ≥ half the catalog name's tokens) AND an
+**energy-density sanity check** (catalog kcal/100 g within ~2× of the estimate). Density
+is the signal string-matching lacks (liqueur 336 vs coffee ~50 kcal/100 g). Bias to
+false-negatives: falling back to the estimate is safe; a categorically-wrong match
+(alcohol for coffee) is not. The gate (`CaptureMatcher.confidentMatch`) makes the matcher
+correct *regardless* of `FoodSearch` ranking, so don't "simplify" it back to catalog-first.
+
+## 2026-06-15 — SwiftUI keyboard avoidance doesn't reach a custom overlay stacked over a sheet
+
+**What happened:** The photo-review note card lives in a full-screen `ZStack` overlay
+(`zIndex 2`) layered over the capture sheet's `NavigationStack`/`ScrollView`. I planned to
+"anchor the card low and let default keyboard avoidance lift it" — it didn't move at all,
+so on re-scan the focused field + Analyze button sat *under* the keyboard. SwiftUI's
+automatic avoidance only insets the **one primary scroll container** (the ScrollView
+underneath); a sibling overlay layer gets nothing. `.keyboardDoneBar()` (a `.keyboard`
+toolbar) attaches fine but does not move the content.
+
+**Rule:** For text entry inside a custom full-screen overlay/ZStack (not a plain sheet or
+ScrollView), don't rely on automatic avoidance — drive it yourself: observe
+`keyboardWillShow/Hide` for the frame-end height and `.padding(.bottom, height)` the
+content, plus `.ignoresSafeArea(.keyboard, edges: .bottom)` so the system can't also
+inset and double-lift. Reusable helper now: `View.keyboardAvoidingPadding()` in
+`Shared/KeyboardSupport.swift`. (Note: I couldn't screenshot this exact flow — it needs a
+Gemini key + the full photo→results→re-scan path — so per the standing keyboard lesson
+this still wants an on-device eyeball.)

@@ -14,9 +14,11 @@
 import Foundation
 
 protocol FoodVisionProvider {
-    /// Identify the foods in a JPEG image. Throws on misconfiguration / network /
-    /// decode failure so the UI can show a precise message.
-    func recognize(_ jpeg: Data) async throws -> [ParsedItem]
+    /// Identify the foods in a JPEG image. `note` is optional free-text context the
+    /// photographer added (e.g. hidden add-ins the camera can't see) — folded into
+    /// the request. Throws on misconfiguration / network / decode failure so the UI
+    /// can show a precise message.
+    func recognize(_ jpeg: Data, note: String?) async throws -> [ParsedItem]
 }
 
 enum FoodVision {
@@ -60,7 +62,7 @@ enum GeminiConfig {
 
 struct GeminiFoodVision: FoodVisionProvider {
 
-    private static let prompt = """
+    private static let basePrompt = """
     You are a nutrition assistant. Identify each distinct food or drink in this meal photo.
     Return ONLY a JSON array. Each element must be:
     {"name": string, "quantity": number, "unit": string, "grams": number,
@@ -76,14 +78,34 @@ struct GeminiFoodVision: FoodVisionProvider {
     If you cannot identify any food, return [].
     """
 
-    func recognize(_ jpeg: Data) async throws -> [ParsedItem] {
+    /// Full prompt for one request. A non-empty `note` is the photographer's own
+    /// context (e.g. add-ins a camera can't see) — folded in as authoritative, then
+    /// we reaffirm JSON-only so the response format stays intact regardless of it.
+    private static func prompt(note: String?) -> String {
+        guard let note = note?.trimmingCharacters(in: .whitespacesAndNewlines), !note.isEmpty else {
+            return basePrompt
+        }
+        return basePrompt + """
+
+
+        Additional context from the person who took the photo — treat it as
+        authoritative. Incorporate it into your answer: add any foods, toppings, or
+        extras they mention even if they are not clearly visible, and adjust portions
+        or preparation to match:
+        "\(note)"
+
+        Return ONLY the JSON array described above.
+        """
+    }
+
+    func recognize(_ jpeg: Data, note: String?) async throws -> [ParsedItem] {
         guard let key = GeminiConfig.apiKey else { throw FoodVisionError.notConfigured }
 
         let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(GeminiConfig.model):generateContent?key=\(key)")!
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try JSONEncoder().encode(GeminiRequest(prompt: Self.prompt, jpeg: jpeg))
+        req.httpBody = try JSONEncoder().encode(GeminiRequest(prompt: Self.prompt(note: note), jpeg: jpeg))
 
         let (data, response) = try await URLSession.shared.data(for: req)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {

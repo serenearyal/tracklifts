@@ -19,12 +19,19 @@ import UIKit
 enum PhotoFailure: Equatable { case noFood, unreadable, notConfigured }
 
 /// The photo pipeline's visible state. `.idle` shows nothing.
-enum PhotoFlow: Equatable { case idle, analyzing, failed(PhotoFailure) }
+/// `.review` is the pre-analysis step: the captured photo + an optional note.
+enum PhotoFlow: Equatable { case idle, review, analyzing, failed(PhotoFailure) }
 
 struct PhotoStatusOverlay: View {
     let flow: PhotoFlow
     let image: UIImage?
     let cameraAvailable: Bool
+    /// The photographer's optional note, bound so the review field edits it in place.
+    @Binding var note: String
+    /// Focus the note field on appear — used when re-scanning (the user came here to
+    /// add context), not on the first review after a capture.
+    var autofocusNote: Bool
+    var onAnalyze: () -> Void
     var onRetry: () -> Void
     var onRetake: () -> Void
     var onGallery: () -> Void
@@ -39,6 +46,7 @@ struct PhotoStatusOverlay: View {
         ZStack {
             backdrop
             switch flow {
+            case .review:              review
             case .analyzing:           analyzing
             case .failed(let failure): failed(failure)
             case .idle:                Color.clear
@@ -77,6 +85,88 @@ struct PhotoStatusOverlay: View {
     }
 
     private var isFailed: Bool { if case .failed = flow { return true }; return false }
+
+    // MARK: - Review (add an optional note, then analyze)
+
+    @FocusState private var noteFocused: Bool
+    @State private var reviewIn = false
+
+    /// Anchored low and lifted by the live keyboard height when the note field is
+    /// focused — SwiftUI's automatic avoidance doesn't reach this overlay layer (it
+    /// only insets the sheet's scroll view underneath). The photo stays visible behind.
+    private var review: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+            reviewCard
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
+        }
+        .keyboardAvoidingPadding()
+        .keyboardDoneBar()
+    }
+
+    private var reviewCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Anything to add?")
+                    .font(.display(26)).foregroundStyle(Palette.ink)
+                    .lineLimit(1).minimumScaleFactor(0.7)
+                Text("Tell the AI about extras, prep, or brands it can’t see — optional.")
+                    .font(.sans(13)).foregroundStyle(Palette.inkSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            noteField
+            EmberButton(title: "Analyze Meal", systemImage: "sparkles", action: onAnalyze)
+            reviewSecondaryRow
+        }
+        .padding(18)
+        .frame(maxWidth: cardMaxWidth, alignment: .leading)
+        .background(.ultraThinMaterial, in: .rect(cornerRadius: 24))
+        .overlay(RoundedRectangle(cornerRadius: 24).strokeBorder(Palette.hairline, lineWidth: 1))
+        .scaleEffect(reviewIn ? 1 : 0.96).opacity(reviewIn ? 1 : 0)
+        .onAppear {
+            reviewIn = false
+            withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) { reviewIn = true }
+            if autofocusNote {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { noteFocused = true }
+            }
+        }
+    }
+
+    private var noteField: some View {
+        TextField("e.g. with 2 creamers and a cane sugar packet", text: $note, axis: .vertical)
+            .lineLimit(1...4)
+            .focused($noteFocused)
+            .autocorrectionDisabled()
+            .font(.sans(15)).foregroundStyle(Palette.ink).tint(Palette.ember)
+            .padding(.vertical, 11).padding(.horizontal, 13)
+            .background(Palette.surface, in: .rect(cornerRadius: 13))
+            .overlay(RoundedRectangle(cornerRadius: 13)
+                .strokeBorder(noteFocused ? Palette.ember.opacity(0.5) : Palette.hairline, lineWidth: 1))
+    }
+
+    private var reviewSecondaryRow: some View {
+        HStack(spacing: 18) {
+            if cameraAvailable {
+                reviewLink("Retake", "camera.fill", onRetake)
+                reviewLink("Gallery", "photo.on.rectangle.angled", onGallery)
+            } else {
+                reviewLink("Choose another photo", "photo.on.rectangle.angled", onGallery)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func reviewLink(_ title: String, _ icon: String, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: icon).font(.system(size: 12, weight: .bold))
+                Text(title).font(.sans(13, .semibold)).lineLimit(1)
+            }
+            .foregroundStyle(Palette.inkSecondary)
+        }
+        .buttonStyle(.plain)
+    }
 
     // MARK: - Analyzing
 

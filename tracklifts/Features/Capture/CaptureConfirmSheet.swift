@@ -13,6 +13,8 @@ import SwiftData
 
 struct CaptureConfirmList: View {
     let day: Date
+    /// Non-nil only for photo batches — drives the "add a note & re-scan" affordance.
+    let onRescan: (() -> Void)?
     let onComplete: () -> Void
 
     @Environment(\.modelContext) private var context
@@ -20,8 +22,9 @@ struct CaptureConfirmList: View {
     @State private var meal: Meal = .defaultForNow
     @State private var editingRow: CaptureMatch?
 
-    init(matches: [CaptureMatch], day: Date, onComplete: @escaping () -> Void) {
+    init(matches: [CaptureMatch], day: Date, onRescan: (() -> Void)? = nil, onComplete: @escaping () -> Void) {
         self.day = day
+        self.onRescan = onRescan
         self.onComplete = onComplete
         _matches = State(initialValue: matches)
     }
@@ -51,6 +54,7 @@ struct CaptureConfirmList: View {
                     }
                     .cardStyle(padding: 14)
                 }
+                if let onRescan { rescanButton(onRescan) }
                 Text("Tap a food name to change the match. Amounts are estimates — tweak the grams.")
                     .font(.sans(12)).foregroundStyle(Palette.inkTertiary)
             }
@@ -121,6 +125,30 @@ struct CaptureConfirmList: View {
         .background(Palette.ember.opacity(0.14), in: .capsule)
         .overlay(Capsule().strokeBorder(Palette.ember.opacity(0.3), lineWidth: 1))
         .fixedSize()
+    }
+
+    /// Photo batches only: when the AI missed something the camera couldn't see
+    /// (hidden add-ins, prep), bounce back to the photo note field to re-run. A fresh
+    /// analysis replaces these rows, so it's offered as a clearly separate path.
+    private func rescanButton(_ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: "sparkles").font(.system(size: 15, weight: .bold))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Missed something?").font(.sans(13, .bold))
+                    Text("Add a note & re-scan the photo")
+                        .font(.sans(11)).foregroundStyle(Palette.inkSecondary)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "arrow.clockwise").font(.system(size: 13, weight: .bold))
+            }
+            .foregroundStyle(Palette.ember)
+            .padding(.vertical, 12).padding(.horizontal, 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Palette.ember.opacity(0.1), in: .rect(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Palette.ember.opacity(0.35), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: Footer (pinned so the action stays in reach — see LogFoodView)

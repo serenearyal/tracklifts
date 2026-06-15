@@ -130,4 +130,69 @@ struct CaptureMatcherMatchTests {
         #expect(matches[0].isEstimated == false)
         #expect(matches[0].food?.kcalPer100g == 400)       // nutrition comes from the catalog
     }
+
+    // MARK: Confidence gate — a photo estimate must not bind to a wrong catalog food
+
+    @Test func photoCoffeeDoesNotBindToAHighCalorieLiqueur() throws {
+        let context = try makeContext()
+        // The exact USDA shape that mislabeled a coffee in the wild (≈336 kcal/100 g).
+        makeFood("Alcoholic beverage, liqueur, coffee, 53 proof", kcal: 336, portion: nil, into: context)
+        try context.save()
+
+        // Model's estimate for a ~240 g milk coffee ≈ 50 kcal/100 g.
+        let estimate = NutrientVector.fromPerServing([Nutrient.energy.rawValue: 120], servingGrams: 240)
+        let item = ParsedItem(name: "coffee", quantity: 1, unit: "",
+                              gramsHint: 240, estimatedPer100g: estimate)
+
+        let matches = CaptureMatcher.match([item], in: context)
+        #expect(matches[0].isEstimated == true)            // kept the estimate, not the liqueur
+        #expect(matches[0].food?.name == "coffee")
+    }
+
+    @Test func photoBananaUpgradesToCatalogWhenNameAndDensityAgree() throws {
+        let context = try makeContext()
+        makeFood("Bananas, raw", kcal: 89, portion: nil, into: context)
+        try context.save()
+
+        let estimate = NutrientVector.fromPerServing([Nutrient.energy.rawValue: 105], servingGrams: 118)
+        let item = ParsedItem(name: "banana", quantity: 1, unit: "",
+                              gramsHint: 118, estimatedPer100g: estimate)
+
+        let matches = CaptureMatcher.match([item], in: context)
+        #expect(matches[0].isEstimated == false)           // confident → adopt the catalog food
+        #expect(matches[0].food?.name == "Bananas, raw")
+        #expect(matches[0].food?.kcalPer100g == 89)         // catalog nutrition, not the estimate
+    }
+
+    @Test func photoMatchRejectedWhenDensityIsFarOff() throws {
+        let context = try makeContext()
+        makeFood("Bananas, raw", kcal: 89, portion: nil, into: context)
+        try context.save()
+
+        // Name agrees but the model's density is wildly different → don't trust it.
+        let estimate = NutrientVector.fromPerServing([Nutrient.energy.rawValue: 400], servingGrams: 100)
+        let item = ParsedItem(name: "banana", quantity: 1, unit: "",
+                              gramsHint: 100, estimatedPer100g: estimate)
+
+        let matches = CaptureMatcher.match([item], in: context)
+        #expect(matches[0].isEstimated == true)
+        #expect(matches[0].food?.name == "banana")
+    }
+
+    // MARK: Confidence helpers (pure)
+
+    @Test func nameCoverageNeedsEveryQueryTokenAndPenalizesLongNames() {
+        #expect(CaptureMatcher.nameMatchCoverage("Bananas, raw", query: "banana") == 0.5)   // plural ok
+        #expect(CaptureMatcher.nameMatchCoverage("Rice, white, cooked", query: "white rice") != nil)
+        #expect(CaptureMatcher.nameMatchCoverage("Bananas, raw", query: "apple") == nil)    // missing token
+        let liqueur = CaptureMatcher.nameMatchCoverage("Alcoholic beverage, liqueur, coffee, 53 proof", query: "coffee")
+        #expect(liqueur != nil && liqueur! < 0.5)            // "coffee" is buried → low coverage
+    }
+
+    @Test func densityClosenessIsSymmetricAndRejectsFarValues() {
+        #expect(CaptureMatcher.densitiesClose(89, 90) == true)
+        #expect(CaptureMatcher.densitiesClose(50, 336) == false)
+        #expect(CaptureMatcher.densitiesClose(336, 50) == false)   // symmetric
+        #expect(CaptureMatcher.densitiesClose(0, 50) == false)     // zero guard
+    }
 }

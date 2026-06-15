@@ -33,6 +33,8 @@ struct CaptureView: View {
     @State private var pendingPhoto: PhotoSource?
     @State private var photoFlow: PhotoFlow = .idle
     @State private var workingImage: UIImage?
+    @State private var photoNote = ""
+    @State private var reviewAutofocus = false
     @State private var analyzeTask: Task<Void, Never>?
 
     @FocusState private var focused: Bool
@@ -45,6 +47,7 @@ struct CaptureView: View {
     struct CaptureBatch: Identifiable, Hashable {
         let id = UUID()
         var matches: [CaptureMatch]
+        var fromPhoto = false        // gates the "add a note & re-scan" affordance
         static func == (a: CaptureBatch, b: CaptureBatch) -> Bool { a.id == b.id }
         func hash(into hasher: inout Hasher) { hasher.combine(id) }
     }
@@ -60,7 +63,10 @@ struct CaptureView: View {
                     flow: photoFlow,
                     image: workingImage,
                     cameraAvailable: cameraAvailable,
-                    onRetry:  { if let img = workingImage { analyzeImage(img) } },
+                    note: $photoNote,
+                    autofocusNote: reviewAutofocus,
+                    onAnalyze: { if let img = workingImage { analyzeImage(img, note: photoNote) } },
+                    onRetry:  { if let img = workingImage { analyzeImage(img, note: photoNote) } },
                     onRetake: { photoFlow = .idle; deferred { start(.camera) } },
                     onGallery: { photoFlow = .idle; deferred { start(.gallery) } },
                     onType:   { photoFlow = .idle; focused = true },
@@ -103,7 +109,7 @@ struct CaptureView: View {
             .onChange(of: speech.transcript) { _, t in if !t.isEmpty { text = t } }
             .onChange(of: photoItem) { _, item in if let item { analyzeGallery(item) } }
             .fullScreenCover(isPresented: $showingCamera) {
-                MealCameraPicker { image in analyzeImage(image) }.ignoresSafeArea()
+                MealCameraPicker { image in presentReview(image) }.ignoresSafeArea()
             }
             .photosPicker(isPresented: $showingGallery, selection: $photoItem, matching: .images)
             .confirmationDialog("Use photo recognition?", isPresented: $showingPhotoOptIn, titleVisibility: .visible) {
@@ -116,7 +122,8 @@ struct CaptureView: View {
                 Text("Your photo is sent to Google Gemini to identify foods. Typed and voice capture stay on your device.")
             }
             .navigationDestination(item: $batch) { b in
-                CaptureConfirmList(matches: b.matches, day: day) { dismiss() }
+                CaptureConfirmList(matches: b.matches, day: day,
+                                   onRescan: b.fromPhoto ? { rescan() } : nil) { dismiss() }
             }
         }
     }
@@ -253,11 +260,23 @@ struct CaptureView: View {
                 photoFlow = .failed(.unreadable)
                 return
             }
-            analyzeImage(image)
+            presentReview(image)
         }
     }
 
-    private func analyzeImage(_ image: UIImage) {
+    /// Stage the captured photo for review with an optional AI note. A fresh capture
+    /// clears any prior note (a new photo is a new meal). If the key is missing we
+    /// skip straight to the failure screen rather than ask for a note that can't run.
+    private func presentReview(_ image: UIImage) {
+        workingImage = image
+        photoNote = ""
+        reviewAutofocus = false
+        noMatches = false
+        guard GeminiConfig.isConfigured else { photoFlow = .failed(.notConfigured); return }
+        photoFlow = .review
+    }
+
+    private func analyzeImage(_ image: UIImage, note: String?) {
         workingImage = image
         noMatches = false
         guard GeminiConfig.isConfigured else { photoFlow = .failed(.notConfigured); return }
@@ -266,15 +285,24 @@ struct CaptureView: View {
         analyzeTask?.cancel()
         analyzeTask = Task {
             do {
-                let items = try await FoodVision.shared.recognize(jpeg)
+                let items = try await FoodVision.shared.recognize(jpeg, note: note)
                 guard !Task.isCancelled else { return }
                 photoFlow = .idle
-                batch = CaptureBatch(matches: CaptureMatcher.match(items, in: context))
+                batch = CaptureBatch(matches: CaptureMatcher.match(items, in: context), fromPhoto: true)
             } catch {
                 guard !Task.isCancelled else { return }
                 photoFlow = .failed(Self.failure(from: error))
             }
         }
+    }
+
+    /// Re-run analysis with more context: cover the results with the review screen
+    /// (its note field focused) and pop them. The photo + prior note are preserved so
+    /// the user can extend the note; tapping Analyze produces a fresh batch.
+    private func rescan() {
+        reviewAutofocus = true
+        photoFlow = .review
+        batch = nil
     }
 
     private static func failure(from error: Error) -> PhotoFailure {

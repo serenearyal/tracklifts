@@ -36,15 +36,27 @@ enum CaptureMatcher {
     @MainActor
     static func match(_ items: [ParsedItem], in context: ModelContext) -> [CaptureMatch] {
         items.map { item in
-            if let food = FoodSearch.run(item.name, in: context, limit: 8).first {
-                let resolved = resolveGrams(item, food: food)
-                return CaptureMatch(parsed: item, food: food, grams: resolved.grams, portionLabel: resolved.label)
-            }
+            // Photo item: the model already estimated this food's nutrition. Trust that
+            // by default — a fuzzy catalog hit on a USDA name is unreliable (plain "coffee"
+            // substring-matches a coffee *liqueur*). Only override the estimate with a
+            // catalog food we're confident is the same food (right name AND comparable
+            // energy density); otherwise log the estimate as before.
             if let estimate = item.estimatedPer100g {
+                if let food = confidentMatch(for: item, estimate: estimate, in: context) {
+                    let resolved = resolveGrams(item, food: food)
+                    return CaptureMatch(parsed: item, food: food, grams: resolved.grams, portionLabel: resolved.label)
+                }
                 let food = estimatedFood(named: item.name, per100g: estimate)
                 let resolved = resolveGrams(item, food: food)
                 return CaptureMatch(parsed: item, food: food, grams: resolved.grams,
                                     portionLabel: resolved.label, isEstimated: true)
+            }
+
+            // Text/voice item: no estimate to fall back on — take the best catalog hit,
+            // else an unmatched row that still carries sane grams.
+            if let food = FoodSearch.run(item.name, in: context, limit: 8).first {
+                let resolved = resolveGrams(item, food: food)
+                return CaptureMatch(parsed: item, food: food, grams: resolved.grams, portionLabel: resolved.label)
             }
             let resolved = resolveGrams(item, food: nil)
             return CaptureMatch(parsed: item, food: nil, grams: resolved.grams, portionLabel: resolved.label)
@@ -60,6 +72,56 @@ enum CaptureMatcher {
     @MainActor
     static func estimatedFood(named name: String, per100g: NutrientVector) -> FoodItem {
         FoodItem(name: name, source: .custom, per100g: per100g, isCustom: true)
+    }
+
+    // MARK: Confident catalog match (photo items)
+
+    /// A catalog food we trust enough to override the photo model's own estimate. Two
+    /// gates, both required, because USDA names defeat plain text search ("coffee"
+    /// substring-matches a coffee *liqueur*):
+    ///  • the name must plausibly BE the queried food (`nameMatchCoverage`), and
+    ///  • its energy density must sit near the model's estimate (`densitiesClose`) —
+    ///    which cleanly rejects the liqueur (336 kcal/100 g vs a ~50 kcal/100 g coffee).
+    /// Returns nil → the caller keeps the AI estimate. The candidate set is generous;
+    /// `match` runs once per capture on a handful of items, so the cost is trivial.
+    @MainActor
+    static func confidentMatch(for item: ParsedItem, estimate: NutrientVector,
+                               in context: ModelContext) -> FoodItem? {
+        FoodSearch.run(item.name, in: context, limit: 200).first { food in
+            guard let coverage = nameMatchCoverage(food.name, query: item.name), coverage >= 0.5
+            else { return false }
+            return densitiesClose(food.kcalPer100g, estimate.energy)
+        }
+    }
+
+    /// How much of a catalog name the query accounts for, or nil if the query isn't
+    /// fully present. Both sides are tokenized (lowercased, split on non-alphanumerics,
+    /// 2+ chars); every query token must prefix-match a name token in either direction,
+    /// so "banana"≈"Bananas" and "egg"≈"Eggs". Coverage = queryTokens / nameTokens, so a
+    /// short query buried in a long, qualifier-heavy name (the liqueur) scores low.
+    static func nameMatchCoverage(_ name: String, query: String) -> Double? {
+        let nameTokens = tokenize(name)
+        let queryTokens = tokenize(query)
+        guard !nameTokens.isEmpty, !queryTokens.isEmpty else { return nil }
+        let allPresent = queryTokens.allSatisfy { q in
+            nameTokens.contains { $0.hasPrefix(q) || q.hasPrefix($0) }
+        }
+        guard allPresent else { return nil }
+        return Double(queryTokens.count) / Double(nameTokens.count)
+    }
+
+    /// Two per-100 g energies are "close" when both are positive and the larger is at
+    /// most `maxRatio`× the smaller — a coarse same-food sanity check on the AI estimate.
+    static func densitiesClose(_ a: Double, _ b: Double, maxRatio: Double = 2.0) -> Bool {
+        guard a > 0, b > 0 else { return false }
+        return max(a, b) / min(a, b) <= maxRatio
+    }
+
+    private static func tokenize(_ s: String) -> [String] {
+        s.lowercased()
+            .split { !$0.isLetter && !$0.isNumber }
+            .map(String.init)
+            .filter { $0.count >= 2 }
     }
 
     /// Grams for a parsed item, in priority order: an explicit hint (photo model),
