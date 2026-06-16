@@ -10,6 +10,7 @@
 
 import Foundation
 import SwiftData
+import OSLog  // OSSignposter begin/endInterval used directly in the async seed loop
 
 enum FoodSeedManager {
     /// Imports the bundled catalog (~7,700 foods, ~20k inserts) on first launch.
@@ -52,16 +53,44 @@ enum FoodSeedManager {
 
     @MainActor
     private static func seed(_ records: [CatalogRecord], into context: ModelContext) async {
+        // Bracket the whole insert loop in a signpost interval so the first-launch
+        // seed is a measurable interval in Instruments and its main-thread hang
+        // lines up with it (Hangs / Time Profiler). Manual begin/end — the loop
+        // `await`s, so it can't go through the synchronous `Perf.interval` closure.
+        let signpostState = Perf.signposter.beginInterval("SeedCatalog")
+        defer { Perf.signposter.endInterval("SeedCatalog", signpostState) }
         for (i, rec) in records.enumerated() {
-            let item = FoodItem(name: rec.name, brand: rec.brand, source: .seed,
-                                per100g: NutrientVector(rec.nutrients), fdcId: rec.fdcId)
-            context.insert(item)
-            insertPortions(rec.portions.map { ($0.label, $0.grams) }, for: item, into: context)
+            insert(rec, into: context)
             // Keep a few-thousand-row first launch off one giant transaction.
             if i % 500 == 499 { try? context.save() }
             // Surface the run loop periodically so the UI isn't frozen through the
             // whole multi-thousand-row import.
             if i % 200 == 199 { await Task.yield() }
+        }
+        try? context.save()
+    }
+
+    /// One record → a FoodItem plus its portions. Shared by the async `seed` and
+    /// the synchronous `benchmarkSeed` so both run the exact same build+insert.
+    @MainActor
+    private static func insert(_ rec: CatalogRecord, into context: ModelContext) {
+        let item = FoodItem(name: rec.name, brand: rec.brand, source: .seed,
+                            per100g: NutrientVector(rec.nutrients), fdcId: rec.fdcId)
+        context.insert(item)
+        insertPortions(rec.portions.map { ($0.label, $0.grams) }, for: item, into: context)
+    }
+
+    // Benchmark-only: a synchronous twin of `seed` that runs the SAME per-record
+    // build+insert loop (FoodItem + insertPortions) with the SAME periodic save
+    // every 500 + a final save, but with NO `await`/`Task.yield()`. It exists purely
+    // to measure raw insert throughput from a perf test; it is NOT used by the app's
+    // first-launch path (which stays cooperative via `seed`). Cross-agent contract:
+    // the name/signature below must not change.
+    @MainActor
+    static func benchmarkSeed(_ records: [CatalogRecord], into context: ModelContext) {
+        for (i, rec) in records.enumerated() {
+            insert(rec, into: context)
+            if i % 500 == 499 { try? context.save() }
         }
         try? context.save()
     }

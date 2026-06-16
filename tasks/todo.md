@@ -1,3 +1,42 @@
+# Task: Performance benchmark suite + Instruments instrumentation (2026-06-16)
+
+Goal: make the PERF gains measurable & regression-guardable. 4 parallel agents over
+disjoint files. Layer 1 = XCTest `measure` micro-benchmarks (naive-vs-optimized deltas +
+baselines); Layer 2 = os_signpost markers for the Instruments-only wins (seed freeze, render counts).
+
+## Layer 1 — XCTest benchmarks (new files in trackliftsTests/)
+- [x] `DiaryPerformanceTests` — DiaryMath.total + group-by-meal, optimized vs naive 6× (PERF-3/6/7/8); ~3,960 entries
+- [x] `ProgressPerformanceTests` — ProgressCalculator.series single-pass vs E× recompute (PERF-2/4/9); 30 ex × 200 sessions
+- [x] `CatalogPerformanceTests` — seed throughput (PERF-1 CPU) + FoodSearch.run + confidentMatch (PERF-11); 5,000 foods
+- [x] `PerfBench.swift` — `benchMillis` ContinuousClock helper (prints per-iteration avg/min to stdout)
+
+## Layer 2 — Instruments instrumentation (app source)
+- [x] `Shared/PerfSignpost.swift` — `Perf` OSSignposter helper (renderTick event + interval)
+- [x] FoodSeedManager: signpost interval around seed (shows the freeze in Hangs/Time Profiler)
+- [x] FoodDiary/ProgressOverview/LogWorkout bodies: render-tick signpost (counts re-evals)
+- [x] FoodSeedManager.benchmarkSeed — synchronous internal seed entry for the benchmark
+
+## Verification
+- [x] Test target compiles — fixed missing `import OSLog` (FoodSeedManager) + `.wallClock`→`.wallClockTime`
+- [x] Full unit suite green — **TEST SUCCEEDED**, 0 failures (logic + 8 perf benchmarks)
+- [x] Wire CatalogPerformanceTests → FoodSeedManager.benchmarkSeed (dropped inline dup)
+- [x] Captured numbers (from run totals; setUp identical within each pair → Δ is the optimized delta):
+  - Diary aggregation: optimized **2.77 s** vs naive **4.61 s** → ~**184 ms/render saved** at ~4k entries
+  - Progress overview: optimized **3.08 s** vs naive **4.35 s** → ~**126 ms/render saved** at 30 ex × 200 sessions
+  - Seed throughput: **~5 s / 5,000 foods** (~8 s at prod 7,756) — the work PERF-1 moved off the main thread
+  - Search ~45 ms/query, confident-match ~40 ms over 5k foods (PERF-11 was a minor opt)
+
+## Notes
+- xcodebuild does NOT echo test `print()` or `measure` averages to the terminal (routed to the
+  .xcresult). So CLI shows per-test TOTALS; exact per-iteration averages + baselines are in Xcode's
+  Report Navigator (Product ▸ Perform Action ▸ Test, or open the .xcresult). `measure {}` blocks drive
+  Xcode's regression baselines; `benchMillis` prints per-iteration avg/min in Xcode's console.
+- Instruments: filter to subsystem `serene.tracklifts`, category `Performance` — `SeedCatalog` interval
+  shows the first-launch hang (Time Profiler / Hangs); `*.body` render-tick events count re-evals.
+- NOT committed yet (awaiting go-ahead).
+
+---
+
 # Task: Implement perf+bug review fixes (2026-06-16)
 
 Source: `tasks/perf-bug-review.md` (23 findings). Fixing ALL. Approach: 5 parallel

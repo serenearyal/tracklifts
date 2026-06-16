@@ -59,6 +59,7 @@ struct FoodDiaryView: View {
     }
 
     var body: some View {
+        let _ = Perf.renderTick("FoodDiary.body")
         let dayEntries = self.dayEntries
         let total = DiaryMath.total(dayEntries) // one decode pass per render, shared below
         let byMeal = Dictionary(grouping: dayEntries, by: { $0.meal }) // group once; sections read from this

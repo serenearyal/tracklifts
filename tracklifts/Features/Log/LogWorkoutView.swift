@@ -50,6 +50,7 @@ struct LogWorkoutView: View {
     }
 
     private var content: some View {
+        let _ = Perf.renderTick("LogWorkout.body")
         // The prior-session history is the same for every exercise section, so
         // sort it ONCE per render (filter + sort over `allSessions`) and thread it
         // into each section — instead of re-filtering/re-sorting inside

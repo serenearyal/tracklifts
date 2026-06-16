@@ -32,7 +32,8 @@ struct ProgressOverviewView: View {
     @State private var scope: ProgressScope = .tracked
 
     var body: some View {
-        NavigationStack {
+        let _ = Perf.renderTick("ProgressOverview.body")
+        return NavigationStack {
             ScrollView {
                 if sessions.isEmpty {
                     VStack(spacing: 28) {
