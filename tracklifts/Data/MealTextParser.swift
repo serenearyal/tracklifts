@@ -38,7 +38,9 @@ struct ParsedItem: Equatable {
 enum MealTextParser {
     /// Split a free-text meal into parsed items. Empty/whitespace → `[]`.
     static func parse(_ text: String) -> [ParsedItem] {
-        segments(of: text).compactMap { parseSegment($0) }
+        // Cap pathological input length so a giant paste can't jank the parse.
+        let text = String(text.prefix(2_000))
+        return segments(of: text).compactMap { parseSegment($0) }
     }
 
     // MARK: Segmentation

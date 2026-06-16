@@ -226,6 +226,14 @@ struct NutritionPlan {
                          weeklyRateKg: weeklyRateKg(goal: goal, weightKg: weightKg, pace: pace, customWeeklyKg: 0))
     }
 
+    /// The weekly kg rate the calorie target will ACTUALLY deliver — i.e. the
+    /// clamped `dailyEnergyDelta` converted back through `kcalPerKg`. `weeksToTarget`
+    /// should use this so the displayed ETA matches the pace the deficit/surplus
+    /// produces (the raw `weeklyRateKg` can imply a daily kcal the clamp won't honor).
+    static func realizedWeeklyKg(goal: FitnessGoal, weeklyRateKg: Double) -> Double {
+        abs(dailyEnergyDelta(goal: goal, weeklyRateKg: weeklyRateKg)) * 7 / kcalPerKg
+    }
+
     /// Estimated weeks to move from `currentKg` to `targetKg` at a weekly rate
     /// (kg). 0 when there's no rate or no gap.
     static func weeksToTarget(currentKg: Double, targetKg: Double, weeklyRateKg: Double) -> Double {

@@ -161,7 +161,7 @@ final class DiaryEntry {
         meal = newMeal
         kcal = scaled.energy
         nutrientData = scaled.encoded()
-        portionLabel = "\(Int(newGrams.rounded())) g"
+        portionLabel = "\(newGrams.rounded().safeInt) g"
     }
 }
 

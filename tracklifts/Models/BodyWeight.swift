@@ -21,7 +21,7 @@ final class BodyWeightEntry {
     var createdAt: Date = Date()
 
     init(date: Date = .now, weight: Double, bodyFat: Double = 0) {
-        self.date = date
+        self.date = Calendar.current.startOfDay(for: date)
         self.weight = weight
         self.bodyFat = bodyFat
         self.createdAt = Date()

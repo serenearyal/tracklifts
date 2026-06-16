@@ -68,8 +68,12 @@ final class HealthKitManager: ObservableObject {
         guard isAvailable else { return }
         do {
             try await store.requestAuthorization(toShare: writeTypes, read: readTypes)
-            UserDefaults.standard.set(true, forKey: Self.connectedKey)
-            isAuthorized = true
+            // requestAuthorization does NOT throw on user denial. Read status is
+            // intentionally opaque (Apple), so gate "connected" on write access:
+            // we only treat Health as connected if every write type is shareable.
+            let granted = writeTypes.allSatisfy { store.authorizationStatus(for: $0) == .sharingAuthorized }
+            UserDefaults.standard.set(granted, forKey: Self.connectedKey)
+            isAuthorized = granted
         } catch {
             isAuthorized = false
         }

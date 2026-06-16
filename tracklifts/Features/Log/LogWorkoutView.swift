@@ -50,7 +50,12 @@ struct LogWorkoutView: View {
     }
 
     private var content: some View {
-        List {
+        // The prior-session history is the same for every exercise section, so
+        // sort it ONCE per render (filter + sort over `allSessions`) and thread it
+        // into each section — instead of re-filtering/re-sorting inside
+        // previousEntry/allTimeBestBefore for every exercise, twice each.
+        let priorSorted = priorSessionsSorted()
+        return List {
             Section {
                 DatePicker("Date", selection: $session.date, displayedComponents: .date)
                     .font(.sans(15))
@@ -60,7 +65,7 @@ struct LogWorkoutView: View {
             .listRowBackground(Palette.surface)
 
             ForEach(session.orderedEntries) { entry in
-                entrySection(entry)
+                entrySection(entry, priorSorted: priorSorted)
             }
 
             Section {
@@ -143,8 +148,12 @@ struct LogWorkoutView: View {
     // MARK: - Entry section
 
     @ViewBuilder
-    private func entrySection(_ entry: LoggedExercise) -> some View {
+    private func entrySection(_ entry: LoggedExercise, priorSorted: [WorkoutSession]) -> some View {
         let bodyweight = entry.exercise?.isBodyweight ?? false
+        // Resolve the single prior performance for this exercise ONCE and reuse it
+        // for both the "Last time" line and the progress delta (was computed twice).
+        let prev = previousEntry(for: entry, in: priorSorted)
+        let isPR = isNewPersonalRecord(entry, in: priorSorted)
         Section {
             ForEach(entry.orderedSets) { set in
                 SetRow(set: set, unit: unit, isBodyweight: bodyweight, focus: $focusedSet)
@@ -165,7 +174,7 @@ struct LogWorkoutView: View {
                 BodyweightToggleChip(isOn: bodyweight) {
                     entry.exercise?.isBodyweight.toggle()
                 }
-                if isNewPersonalRecord(entry) {
+                if isPR {
                     HStack(spacing: 3) {
                         Image(systemName: "trophy.fill")
                         Text("NEW PR")
@@ -185,11 +194,11 @@ struct LogWorkoutView: View {
             .padding(.bottom, 2)
         } footer: {
             VStack(alignment: .leading, spacing: 5) {
-                if let reference = lastPerformance(for: entry) {
+                if let reference = lastPerformance(for: entry, previous: prev) {
                     Label(reference, systemImage: "clock.arrow.circlepath")
                         .foregroundStyle(Palette.inkSecondary)
                 }
-                if let delta = progressDelta(for: entry) {
+                if let delta = progressDelta(for: entry, previous: prev) {
                     Label(delta.text, systemImage: delta.positive ? "arrow.up.right" : "arrow.down.right")
                         .foregroundStyle(delta.positive ? Palette.up : Palette.down)
                         .font(.sans(12, .bold))
@@ -243,12 +252,19 @@ struct LogWorkoutView: View {
         return other.createdAt < session.createdAt
     }
 
-    private func previousEntry(for entry: LoggedExercise) -> LoggedExercise? {
-        guard let exercise = entry.exercise else { return nil }
-        let priorSessions = allSessions
+    /// All sessions logged before the one being edited, most-recent first.
+    /// Hoisted so the filter + sort runs once per render rather than per lookup.
+    private func priorSessionsSorted() -> [WorkoutSession] {
+        allSessions
             .filter { isBefore($0) }
             .sorted { $0.date != $1.date ? $0.date > $1.date : $0.createdAt > $1.createdAt }
-        for past in priorSessions {
+    }
+
+    /// The most recent prior performance of `entry`'s exercise, searched within a
+    /// pre-sorted prior-session list (most-recent first) so the sort isn't repeated.
+    private func previousEntry(for entry: LoggedExercise, in priorSorted: [WorkoutSession]) -> LoggedExercise? {
+        guard let exercise = entry.exercise else { return nil }
+        for past in priorSorted {
             if let match = (past.entries ?? []).first(where: {
                 $0.exercise?.persistentModelID == exercise.persistentModelID && $0.setCount > 0
             }) {
@@ -258,8 +274,13 @@ struct LogWorkoutView: View {
         return nil
     }
 
-    private func lastPerformance(for entry: LoggedExercise) -> String? {
-        guard let prev = previousEntry(for: entry) else { return nil }
+    /// Convenience for non-render paths (set prefill) where no sorted list is on hand.
+    private func previousEntry(for entry: LoggedExercise) -> LoggedExercise? {
+        previousEntry(for: entry, in: priorSessionsSorted())
+    }
+
+    private func lastPerformance(for entry: LoggedExercise, previous prev: LoggedExercise?) -> String? {
+        guard let prev else { return nil }
         let sets = prev.orderedSets
         let body: String
         if prev.exercise?.isBodyweight ?? false {
@@ -276,8 +297,8 @@ struct LogWorkoutView: View {
         return "Last time: \(body)"
     }
 
-    private func progressDelta(for entry: LoggedExercise) -> (text: String, positive: Bool)? {
-        guard let prev = previousEntry(for: entry) else { return nil }
+    private func progressDelta(for entry: LoggedExercise, previous prev: LoggedExercise?) -> (text: String, positive: Bool)? {
+        guard let prev else { return nil }
         let current = entry.bestEstimatedOneRepMax
         let previous = prev.bestEstimatedOneRepMax
         guard current > 0, previous > 0 else { return nil }
@@ -289,10 +310,13 @@ struct LogWorkoutView: View {
         return (text, diff > 0)
     }
 
-    private func allTimeBestBefore(_ entry: LoggedExercise) -> Double {
+    /// Best prior estimated 1RM, taken over the already-filtered prior-session list.
+    /// (`max` is order-independent, so the render-sorted list gives the same result
+    /// as scanning `allSessions where isBefore`.)
+    private func allTimeBestBefore(_ entry: LoggedExercise, in priorSorted: [WorkoutSession]) -> Double {
         guard let exercise = entry.exercise else { return 0 }
         var best = 0.0
-        for past in allSessions where isBefore(past) {
+        for past in priorSorted {
             for e in past.entries ?? [] where e.exercise?.persistentModelID == exercise.persistentModelID {
                 best = max(best, e.bestEstimatedOneRepMax)
             }
@@ -300,9 +324,9 @@ struct LogWorkoutView: View {
         return best
     }
 
-    private func isNewPersonalRecord(_ entry: LoggedExercise) -> Bool {
+    private func isNewPersonalRecord(_ entry: LoggedExercise, in priorSorted: [WorkoutSession]) -> Bool {
         let current = entry.bestEstimatedOneRepMax
-        let previousBest = allTimeBestBefore(entry)
+        let previousBest = allTimeBestBefore(entry, in: priorSorted)
         return current > 0 && previousBest > 0 && current > previousBest + 0.001
     }
 

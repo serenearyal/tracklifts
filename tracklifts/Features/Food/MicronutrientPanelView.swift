@@ -22,7 +22,7 @@ struct MicronutrientPanelView: View {
         DiaryMath.total(allEntries.filter { Calendar.current.isDate($0.date, inSameDayAs: day) })
     }
 
-    private var completenessHeader: some View {
+    private func completenessHeader(total: NutrientVector) -> some View {
         let score = Completeness.score(total: total, sex: sex, age: age)
         return VStack(spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
@@ -71,9 +71,10 @@ struct MicronutrientPanelView: View {
     }
 
     var body: some View {
-        ScrollView {
+        let total = self.total // decode the day's entries once; shared by header + every row
+        return ScrollView {
             VStack(alignment: .leading, spacing: 22) {
-                completenessHeader
+                completenessHeader(total: total)
                 ForEach(NutrientGroup.allCases) { group in
                     let nutrients = group.targetable
                     if !nutrients.isEmpty {

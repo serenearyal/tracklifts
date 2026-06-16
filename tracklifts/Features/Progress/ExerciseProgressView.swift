@@ -39,10 +39,13 @@ struct ExerciseProgressView: View {
         ProgressCalculator.series(for: exercise, metric: metric, in: relevantSessions)
     }
 
-    private var points: [ProgressPoint] {
-        guard let days = window.days else { return allTimePoints }
+    /// Applies the active time window to an already-computed all-time series.
+    /// Takes the series as a parameter so the caller can reuse a single
+    /// `allTimePoints` computation across the render.
+    private func windowed(_ allTime: [ProgressPoint]) -> [ProgressPoint] {
+        guard let days = window.days else { return allTime }
         let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: .now) ?? .distantPast
-        return allTimePoints.filter { $0.date >= cutoff }
+        return allTime.filter { $0.date >= cutoff }
     }
 
     private var unitSuffix: String { metric.isWeightUnit ? " \(unit.label)" : "" }
@@ -70,11 +73,17 @@ struct ExerciseProgressView: View {
                 .tint(Palette.ember)
             }
 
-            if points.count < 2 {
-                notEnoughData
+            // Compute the all-time series ONCE per render (relevantSessions +
+            // ProgressCalculator.series), then window it inline. This threads a
+            // single series through the count check, summary, chart, and empty
+            // message instead of recomputing it on every reference.
+            let allTime = allTimePoints
+            let pts = windowed(allTime)
+            if pts.count < 2 {
+                notEnoughData(allTimeCount: allTime.count)
             } else {
-                summaryRow
-                chart
+                summaryRow(pts)
+                chart(pts)
             }
         }
         .onChange(of: bodyWeight) {
@@ -84,7 +93,7 @@ struct ExerciseProgressView: View {
         }
     }
 
-    private var summaryRow: some View {
+    private func summaryRow(_ points: [ProgressPoint]) -> some View {
         HStack(spacing: 0) {
             let values = points.map(\.value)
             StatPill(value: formatted(values.last ?? 0), label: "Latest", tint: accent)
@@ -106,7 +115,7 @@ struct ExerciseProgressView: View {
         Rectangle().fill(Palette.hairline).frame(width: 1, height: 34)
     }
 
-    private var chart: some View {
+    private func chart(_ points: [ProgressPoint]) -> some View {
         Chart(points) { point in
             AreaMark(x: .value("Date", point.date), y: .value(metric.rawValue, point.value))
                 .foregroundStyle(.linearGradient(
@@ -144,12 +153,12 @@ struct ExerciseProgressView: View {
         .frame(height: 220)
     }
 
-    private var notEnoughData: some View {
+    private func notEnoughData(allTimeCount: Int) -> some View {
         VStack(spacing: 10) {
             Image(systemName: "chart.line.uptrend.xyaxis")
                 .font(.system(size: 26, weight: .bold))
                 .foregroundStyle(accent)
-            Text(emptyMessage)
+            Text(emptyMessage(allTimeCount: allTimeCount))
                 .font(.sans(14))
                 .foregroundStyle(Palette.inkSecondary)
                 .multilineTextAlignment(.center)
@@ -158,9 +167,9 @@ struct ExerciseProgressView: View {
         .frame(height: 180)
     }
 
-    private var emptyMessage: String {
-        if allTimePoints.isEmpty { return "No data logged yet" }
-        if window != .all && allTimePoints.count >= 2 {
+    private func emptyMessage(allTimeCount: Int) -> String {
+        if allTimeCount == 0 { return "No data logged yet" }
+        if window != .all && allTimeCount >= 2 {
             return "Not enough data in \(window.label.lowercased()) — try All time"
         }
         return "Log this lift again to see a trend"

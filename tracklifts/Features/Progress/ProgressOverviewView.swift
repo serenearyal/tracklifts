@@ -44,13 +44,24 @@ struct ProgressOverviewView: View {
                     }
                     .padding(20)
                 } else {
+                    // Compute the heavy shared inputs ONCE per render and thread
+                    // them into the records + track sections (each used to recompute
+                    // these independently):
+                    //   • `tracked`  — the O(S×entries) "ever-logged" scan.
+                    //   • `ordered`  — sessions oldest→newest, reused for every
+                    //                  ProgressCalculator.series call (no per-call realloc).
+                    //   • `series`   — exercise → progression points, built once and
+                    //                  reused for both the PR list and the trend cards.
+                    let tracked = trackedExercises
+                    let ordered = Array(sessions.reversed())
+                    let series = trackedSeries(tracked, ordered: ordered)
                     VStack(alignment: .leading, spacing: 22) {
                         header.appearLift(0)
                         heroCard.appearLift(1)
                         statsRow.appearLift(2)
                         bodyWeightCard.appearLift(3)
-                        recordsSection.appearLift(4)
-                        trackSection.appearLift(5)
+                        recordsSection(tracked: tracked, series: series).appearLift(4)
+                        trackSection(tracked: tracked, ordered: ordered, series: series).appearLift(5)
                     }
                     .padding(20)
                     .padding(.bottom, 36)
@@ -137,14 +148,35 @@ struct ProgressOverviewView: View {
 
     // MARK: - Records
 
-    private var recentPRs: [(exercise: Exercise, value: Double, metric: ProgressMetric)] {
-        var results: [(exercise: Exercise, value: Double, metric: ProgressMetric, date: Date)] = []
-        for exercise in trackedExercises {
+    /// Per-tracked-exercise progression points, computed in a single pass over
+    /// `ordered` (oldest→newest). Reused by `recentPRs` and the trend cards so the
+    /// O(sessions × sets) series is never built more than once per exercise.
+    /// Keyed by the exercise's persistent id, with the metric used to build it.
+    private func trackedSeries(
+        _ tracked: [Exercise],
+        ordered: [WorkoutSession]
+    ) -> [PersistentIdentifier: (metric: ProgressMetric, points: [ProgressPoint])] {
+        var map: [PersistentIdentifier: (metric: ProgressMetric, points: [ProgressPoint])] = [:]
+        map.reserveCapacity(tracked.count)
+        for exercise in tracked {
             let metric = exercise.primaryMetric
-            let series = ProgressCalculator.series(for: exercise, metric: metric, in: sessions.reversed())
-            guard series.count >= 2, let best = series.map(\.value).max(), best > 0,
-                  let last = series.last, last.value >= best - 0.001 else { continue }
-            results.append((exercise, best, metric, last.date))
+            map[exercise.persistentModelID] = (metric,
+                ProgressCalculator.series(for: exercise, metric: metric, in: ordered))
+        }
+        return map
+    }
+
+    private func recentPRs(
+        _ tracked: [Exercise],
+        series: [PersistentIdentifier: (metric: ProgressMetric, points: [ProgressPoint])]
+    ) -> [(exercise: Exercise, value: Double, metric: ProgressMetric)] {
+        var results: [(exercise: Exercise, value: Double, metric: ProgressMetric, date: Date)] = []
+        for exercise in tracked {
+            guard let entry = series[exercise.persistentModelID] else { continue }
+            let points = entry.points
+            guard points.count >= 2, let best = points.map(\.value).max(), best > 0,
+                  let last = points.last, last.value >= best - 0.001 else { continue }
+            results.append((exercise, best, entry.metric, last.date))
         }
         // Most-recent PR first — matches "Recent Records" and stays metric-
         // agnostic, so we never rank kilograms against rep counts.
@@ -167,8 +199,11 @@ struct ProgressOverviewView: View {
     }
 
     @ViewBuilder
-    private var recordsSection: some View {
-        let prs = recentPRs
+    private func recordsSection(
+        tracked: [Exercise],
+        series: [PersistentIdentifier: (metric: ProgressMetric, points: [ProgressPoint])]
+    ) -> some View {
+        let prs = recentPRs(tracked, series: series)
         if !prs.isEmpty {
             VStack(alignment: .leading, spacing: 14) {
                 SectionLabel(title: "Recent Records", systemImage: "trophy.fill")
@@ -217,11 +252,15 @@ struct ProgressOverviewView: View {
 
     // MARK: - Track section (scope selector + per-scope progress)
 
-    private var trackSection: some View {
+    private func trackSection(
+        tracked: [Exercise],
+        ordered: [WorkoutSession],
+        series: [PersistentIdentifier: (metric: ProgressMetric, points: [ProgressPoint])]
+    ) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             SectionLabel(title: "Track Progress", systemImage: "scope")
             scopeChips
-            scopeContent
+            scopeContent(tracked: tracked, ordered: ordered, series: series)
         }
     }
 
@@ -258,21 +297,30 @@ struct ProgressOverviewView: View {
     }
 
     @ViewBuilder
-    private var scopeContent: some View {
+    private func scopeContent(
+        tracked: [Exercise],
+        ordered: [WorkoutSession],
+        series: [PersistentIdentifier: (metric: ProgressMetric, points: [ProgressPoint])]
+    ) -> some View {
         switch scope {
         case .tracked:
-            trendList(trackedExercises,
+            trendList(tracked, ordered: ordered, series: series,
                       emptyHint: "Log a workout to start tracking lifts here.")
         case .favorites:
-            trendList(favorites,
+            trendList(favorites, ordered: ordered, series: series,
                       emptyHint: "Tap the star on any exercise — or “Favorite all” on a split — to pin lifts here.")
         case .split(let id):
-            splitProgress(id)
+            splitProgress(id, ordered: ordered, series: series)
         }
     }
 
     @ViewBuilder
-    private func trendList(_ exercises: [Exercise], emptyHint: String) -> some View {
+    private func trendList(
+        _ exercises: [Exercise],
+        ordered: [WorkoutSession],
+        series: [PersistentIdentifier: (metric: ProgressMetric, points: [ProgressPoint])],
+        emptyHint: String
+    ) -> some View {
         if exercises.isEmpty {
             Text(emptyHint)
                 .font(.sans(14)).foregroundStyle(Palette.inkSecondary)
@@ -282,7 +330,8 @@ struct ProgressOverviewView: View {
             LazyVStack(spacing: 10) {
                 ForEach(exercises) { exercise in
                     NavigationLink { ExerciseDetailView(exercise: exercise) } label: {
-                        ExerciseTrendCard(exercise: exercise, sessions: sessions, unit: unit)
+                        ExerciseTrendCard(exercise: exercise, sessions: ordered, unit: unit,
+                                          precomputed: series[exercise.persistentModelID]?.points)
                     }
                     .buttonStyle(.plain)
                 }
@@ -291,7 +340,11 @@ struct ProgressOverviewView: View {
     }
 
     @ViewBuilder
-    private func splitProgress(_ id: PersistentIdentifier) -> some View {
+    private func splitProgress(
+        _ id: PersistentIdentifier,
+        ordered: [WorkoutSession],
+        series: [PersistentIdentifier: (metric: ProgressMetric, points: [ProgressPoint])]
+    ) -> some View {
         if let split = splits.first(where: { $0.persistentModelID == id }) {
             VStack(alignment: .leading, spacing: 16) {
                 ForEach(split.orderedDays) { day in
@@ -308,7 +361,8 @@ struct ProgressOverviewView: View {
                         } else {
                             ForEach(day.exercises) { exercise in
                                 NavigationLink { ExerciseDetailView(exercise: exercise) } label: {
-                                    ExerciseTrendCard(exercise: exercise, sessions: sessions, unit: unit)
+                                    ExerciseTrendCard(exercise: exercise, sessions: ordered, unit: unit,
+                                                      precomputed: series[exercise.persistentModelID]?.points)
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -327,13 +381,20 @@ struct ProgressOverviewView: View {
 
 struct ExerciseTrendCard: View {
     let exercise: Exercise
+    /// Sessions in chronological (oldest→newest) order. `ProgressCalculator.series`
+    /// re-sorts by date internally, so the order here is not load-bearing — but
+    /// passing the already-reversed array avoids a per-card `reversed()` realloc.
     let sessions: [WorkoutSession]
     let unit: WeightUnit
+    /// Pre-built progression points for this exercise (from the parent's single-pass
+    /// series map). When `nil` — e.g. a favorite/split exercise outside the tracked
+    /// set — the card falls back to computing the series itself, but only once.
+    var precomputed: [ProgressPoint]? = nil
 
     private var metric: ProgressMetric { exercise.primaryMetric }
 
-    private var points: [ProgressPoint] {
-        ProgressCalculator.series(for: exercise, metric: metric, in: sessions.reversed())
+    private func resolvedPoints() -> [ProgressPoint] {
+        precomputed ?? ProgressCalculator.series(for: exercise, metric: metric, in: sessions)
     }
 
     private var valueUnit: String { metric == .bestReps ? "reps" : unit.label }
@@ -343,7 +404,10 @@ struct ExerciseTrendCard: View {
     }
 
     var body: some View {
-        HStack(spacing: 14) {
+        // Resolve the progression series ONCE per render (reused for the latest
+        // value, trend chip, and chart) instead of recomputing it on each access.
+        let points = resolvedPoints()
+        return HStack(spacing: 14) {
             MuscleGlyph(tag: exercise.tag, size: 40)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {

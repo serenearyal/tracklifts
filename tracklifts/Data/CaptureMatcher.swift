@@ -87,8 +87,12 @@ enum CaptureMatcher {
     @MainActor
     static func confidentMatch(for item: ParsedItem, estimate: NutrientVector,
                                in context: ModelContext) -> FoodItem? {
-        FoodSearch.run(item.name, in: context, limit: 200).first { food in
-            guard let coverage = nameMatchCoverage(food.name, query: item.name), coverage >= 0.5
+        // Tokenize the query once, not per candidate — `first(where:)` runs the
+        // coverage check across up to 200 rows and the query side is invariant.
+        let queryTokens = tokenize(item.name)
+        guard !queryTokens.isEmpty else { return nil }
+        return FoodSearch.run(item.name, in: context, limit: 200).first { food in
+            guard let coverage = nameMatchCoverage(food.name, queryTokens: queryTokens), coverage >= 0.5
             else { return false }
             return densitiesClose(food.kcalPer100g, estimate.energy)
         }
@@ -100,8 +104,13 @@ enum CaptureMatcher {
     /// so "banana"≈"Bananas" and "egg"≈"Eggs". Coverage = queryTokens / nameTokens, so a
     /// short query buried in a long, qualifier-heavy name (the liqueur) scores low.
     static func nameMatchCoverage(_ name: String, query: String) -> Double? {
+        nameMatchCoverage(name, queryTokens: tokenize(query))
+    }
+
+    /// Same as above, but reusing query tokens computed once by the caller — the
+    /// hot path (`confidentMatch`) tokenizes the query a single time, not per row.
+    static func nameMatchCoverage(_ name: String, queryTokens: [String]) -> Double? {
         let nameTokens = tokenize(name)
-        let queryTokens = tokenize(query)
         guard !nameTokens.isEmpty, !queryTokens.isEmpty else { return nil }
         let allPresent = queryTokens.allSatisfy { q in
             nameTokens.contains { $0.hasPrefix(q) || q.hasPrefix($0) }
@@ -132,7 +141,7 @@ enum CaptureMatcher {
     static func resolveGrams(_ item: ParsedItem, food: FoodItem?) -> (grams: Double, label: String) {
         let qty = item.quantity > 0 ? item.quantity : 1
 
-        if let hint = item.gramsHint, hint > 0 {
+        if let hint = item.gramsHint, hint.isFinite, hint > 0, hint <= 50_000 {
             return (hint, gramLabel(hint))
         }
 
@@ -169,13 +178,13 @@ enum CaptureMatcher {
 
     // MARK: Labels
 
-    private static func gramLabel(_ grams: Double) -> String { "\(Int(grams.rounded())) g" }
+    private static func gramLabel(_ grams: Double) -> String { "\(grams.rounded().safeInt) g" }
 
     private static func multiplied(_ qty: Double, _ portionLabel: String) -> String {
         qty == 1 ? portionLabel : "\(fmt(qty))× \(portionLabel)"
     }
 
     private static func fmt(_ value: Double) -> String {
-        value == value.rounded() ? String(Int(value)) : String(format: "%g", value)
+        value == value.rounded() ? String(value.safeInt) : String(format: "%g", value)
     }
 }

@@ -36,7 +36,6 @@ struct TodayView: View {
         allEntries.filter { Calendar.current.isDateInToday($0.date) }
     }
     private var eaten: NutrientVector { DiaryMath.total(todayEntries) }
-    private var remaining: Double { goalEnergy - eaten.energy }
 
     private var todaySessions: [WorkoutSession] {
         sessions.filter { Calendar.current.isDateInToday($0.date) }
@@ -49,18 +48,18 @@ struct TodayView: View {
     private var weekSessions: [WorkoutSession] {
         sessions.filter { Calendar.current.isDate($0.date, equalTo: .now, toGranularity: .weekOfYear) }
     }
-    private var weekSets: Int { weekSessions.reduce(0) { $0 + $1.totalSets } }
-    private var weekVolume: Double { weekSessions.reduce(0) { $0 + $1.totalVolume } }
 
     var body: some View {
-        NavigationStack {
+        let eaten = self.eaten            // JSON-decodes today's entries once; reused by the card
+        let week = weekSessions           // one week filter; reused for count/sets/volume
+        return NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     header.appearLift(0)
-                    nutritionSection.appearLift(1)
+                    nutritionSection(eaten: eaten).appearLift(1)
                     trainingSection.appearLift(2)
                     bodyWeightSection.appearLift(3)
-                    weekStrip.appearLift(4)
+                    weekStrip(week: week).appearLift(4)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 20)
@@ -114,8 +113,9 @@ struct TodayView: View {
 
     // MARK: - Nutrition
 
-    private var nutritionSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+    private func nutritionSection(eaten: NutrientVector) -> some View {
+        let remaining = goalEnergy - eaten.energy
+        return VStack(alignment: .leading, spacing: 10) {
             HStack {
                 SectionLabel(title: "Nutrition", systemImage: "fork.knife")
                 Spacer()
@@ -126,7 +126,7 @@ struct TodayView: View {
                 VStack(spacing: 14) {
                     HStack(alignment: .firstTextBaseline) {
                         HStack(alignment: .firstTextBaseline, spacing: 6) {
-                            Text(Int(eaten.energy.rounded()).formatted())
+                            Text(eaten.energy.rounded().safeInt.formatted())
                                 .font(.display(40)).foregroundStyle(Palette.ink)
                                 .contentTransition(.numericText())
                             Text("/ \(Int(goalEnergy)) kcal")
@@ -134,7 +134,7 @@ struct TodayView: View {
                         }
                         Spacer()
                         VStack(alignment: .trailing, spacing: 1) {
-                            Text(Int(abs(remaining).rounded()).formatted())
+                            Text(abs(remaining).rounded().safeInt.formatted())
                                 .font(.display(22))
                                 .foregroundStyle(remaining >= 0 ? Palette.up : Palette.down)
                             Text(remaining >= 0 ? "LEFT" : "OVER")
@@ -222,14 +222,16 @@ struct TodayView: View {
 
     // MARK: - This week
 
-    private var weekStrip: some View {
-        VStack(alignment: .leading, spacing: 10) {
+    private func weekStrip(week: [WorkoutSession]) -> some View {
+        let sets = week.reduce(0) { $0 + $1.totalSets }
+        let volume = week.reduce(0.0) { $0 + $1.totalVolume }
+        return VStack(alignment: .leading, spacing: 10) {
             SectionLabel(title: "This Week", systemImage: "calendar")
             HStack(spacing: 12) {
-                StatTile(value: "\(weekSessions.count)", label: "Workouts", systemImage: "flame.fill")
-                StatTile(value: "\(weekSets)", label: "Sets",
+                StatTile(value: "\(week.count)", label: "Workouts", systemImage: "flame.fill")
+                StatTile(value: "\(sets)", label: "Sets",
                          systemImage: "square.stack.3d.up.fill", tint: Palette.gold)
-                StatTile(value: Int(weekVolume).formatted(.number.notation(.compactName)),
+                StatTile(value: volume.safeInt.formatted(.number.notation(.compactName)),
                          label: "Vol (\(unit.label))", systemImage: "scalemass.fill", tint: Palette.emberHi)
             }
         }

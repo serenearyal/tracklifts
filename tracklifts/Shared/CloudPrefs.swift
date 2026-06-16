@@ -33,6 +33,10 @@ final class CloudPrefs {
     private let store: NSUbiquitousKeyValueStore
     private var isApplyingRemote = false
     private var observers: [NSObjectProtocol] = []
+    /// Coalesces a burst of local defaults writes (e.g. a slider drag) into one
+    /// `pushLocal` so we don't mirror on every keystroke/tick. Cancelled & rescheduled
+    /// on each change; the trailing edge fires the actual push.
+    private var pushTask: Task<Void, Never>?
 
     /// Injectable for tests (UserDefaults(suiteName:) + a dictionary-backed
     /// NSUbiquitousKeyValueStore subclass).
@@ -58,7 +62,7 @@ final class CloudPrefs {
             forName: UserDefaults.didChangeNotification,
             object: defaults, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.pushLocal() }
+            MainActor.assumeIsolated { self?.schedulePush() }
         })
         pushLocal() // upload an established user's values once
     }
@@ -71,7 +75,7 @@ final class CloudPrefs {
         isApplyingRemote = true
         defer { isApplyingRemote = false }
         for key in Self.mirrored {
-            if let remote = store.object(forKey: key) {
+            if let remote = sanitized(store.object(forKey: key)) {
                 defaults.set(remote, forKey: key)
             }
         }
@@ -88,9 +92,34 @@ final class CloudPrefs {
         isApplyingRemote = true
         defer { isApplyingRemote = false }
         for key in Self.mirrored where changed.contains(key) {
-            guard let remote = store.object(forKey: key),
+            guard let remote = sanitized(store.object(forKey: key)),
                   !valuesEqual(remote, defaults.object(forKey: key)) else { continue }
             defaults.set(remote, forKey: key) // steady state: last writer wins
+        }
+    }
+
+    /// Reject obviously-corrupt KVS scalars before they become local profile/goal
+    /// values. A non-finite or absurd number (NaN/Inf/overflow) would otherwise
+    /// drive goal/TDEE math or trap an `Int(...)` conversion downstream. Non-numeric
+    /// plist scalars (enum-backed strings, bools) pass through — an unknown string
+    /// simply fails to match its enum and the reader falls back to a default.
+    private func sanitized(_ value: Any?) -> Any? {
+        guard let number = value as? NSNumber else { return value }
+        if CFGetTypeID(number) == CFBooleanGetTypeID() { return value } // leave bools alone
+        let d = number.doubleValue
+        guard d.isFinite, abs(d) <= 1_000_000 else { return nil }
+        return value
+    }
+
+    /// Debounced entry point for the chatty defaults observer: coalesce a burst of
+    /// writes (~400 ms) into a single `pushLocal`. The class is @MainActor-isolated,
+    /// so the Task body runs on the main actor.
+    private func schedulePush() {
+        pushTask?.cancel()
+        pushTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard !Task.isCancelled else { return }
+            self?.pushLocal()
         }
     }
 
@@ -110,7 +139,9 @@ final class CloudPrefs {
             store.set(local, forKey: key)
             dirty = true
         }
-        if dirty { store.synchronize() }
+        // KVS coalesces and auto-syncs writes; the startup flush in `start()` handles
+        // the initial push/pull. No routine per-change synchronize() (PERF-10).
+        _ = dirty
     }
 
     /// Loop guard: applying remote writes defaults → didChangeNotification →

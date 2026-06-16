@@ -35,8 +35,9 @@ enum Completeness {
 
         var penalty = 0.0
         for n in NutritionGoals.targetable where n.limitKind == .stayUnder {
-            let limit = n.target(sex: sex, age: age) ?? 0
-            guard limit > 0 else { continue }
+            // Mirror the adequacy side: use THIS user's limit, and skip nutrients
+            // with no positive limit for these stats (don't read a fixed-stat list).
+            guard let limit = n.target(sex: sex, age: age), limit > 0 else { continue }
             penalty += max(0, total[n] / limit - 1) // 0 while under the limit
         }
 

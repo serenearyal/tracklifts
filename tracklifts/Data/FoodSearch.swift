@@ -24,15 +24,24 @@ enum FoodSearch {
             sortBy: [SortDescriptor(\.name)]) // favorites-first applied in the in-memory rank below
         descriptor.fetchLimit = limit
         let fetched = (try? context.fetch(descriptor)) ?? []
+        // Lowercase the query once here, not O(n log n) times inside the comparator.
+        let lq = q.lowercased()
         return fetched.sorted {
-            ($0.isFavorite ? 0 : 1, matchRank($0.name, query: q), $0.name)
-                < ($1.isFavorite ? 0 : 1, matchRank($1.name, query: q), $1.name)
+            ($0.isFavorite ? 0 : 1, matchRank($0.name, lq: lq), $0.name)
+                < ($1.isFavorite ? 0 : 1, matchRank($1.name, lq: lq), $1.name)
         }
     }
 
     /// 0 = name starts with the query, 1 = some word starts with it, 2 = elsewhere.
+    /// `query` is lowercased here for callers that haven't pre-lowercased it.
     static func matchRank(_ name: String, query: String) -> Int {
-        let lname = name.lowercased(), lq = query.lowercased()
+        matchRank(name, lq: query.lowercased())
+    }
+
+    /// Ranking against an already-lowercased query, to avoid re-lowercasing per
+    /// comparison inside a sort.
+    static func matchRank(_ name: String, lq: String) -> Int {
+        let lname = name.lowercased()
         if lname.hasPrefix(lq) { return 0 }
         if lname.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).contains(where: { $0.hasPrefix(lq) }) {
             return 1

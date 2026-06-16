@@ -12,8 +12,19 @@ import Foundation
 import SwiftData
 
 enum FoodSeedManager {
+    /// Imports the bundled catalog (~7,700 foods, ~20k inserts) on first launch.
+    /// Async + cooperative: it `await`s `Task.yield()` between batches so the main
+    /// run loop can present frames instead of freezing for the whole import.
+    ///
+    /// (We stay on the caller's main-actor `ModelContext` rather than a background
+    /// one because the `@Model` inits — `FoodItem`/`FoodPortion`/`NutrientVector` —
+    /// are MainActor-isolated under this target's default isolation, so a detached
+    /// background context can't build them without changing those shared model APIs.
+    /// Yielding keeps the import off the critical frame path while preserving the
+    /// iOS-17 `insertPortions` discipline.)
     @MainActor
-    static func seedIfNeeded(_ context: ModelContext) {
+    static func seedIfNeeded(_ context: ModelContext) async {
+        // Cheap guard first: skip the decode + inserts entirely once foods exist.
         let count = (try? context.fetchCount(FetchDescriptor<FoodItem>())) ?? 0
         guard count == 0 else { return }
 
@@ -24,7 +35,9 @@ enum FoodSeedManager {
         // with the USDA foods. FoodLibrary now survives only as the offline
         // source for the friendly-name overlay (applied at seed time later).
         guard let records = catalogJSON() else { return }
-        seed(records, into: context)
+        // Let the decode's frame land before the insert loop begins.
+        await Task.yield()
+        await seed(records, into: context)
     }
 
     // MARK: - Bundled USDA panel (Phase 2)
@@ -38,7 +51,7 @@ enum FoodSeedManager {
     }
 
     @MainActor
-    private static func seed(_ records: [CatalogRecord], into context: ModelContext) {
+    private static func seed(_ records: [CatalogRecord], into context: ModelContext) async {
         for (i, rec) in records.enumerated() {
             let item = FoodItem(name: rec.name, brand: rec.brand, source: .seed,
                                 per100g: NutrientVector(rec.nutrients), fdcId: rec.fdcId)
@@ -46,6 +59,9 @@ enum FoodSeedManager {
             insertPortions(rec.portions.map { ($0.label, $0.grams) }, for: item, into: context)
             // Keep a few-thousand-row first launch off one giant transaction.
             if i % 500 == 499 { try? context.save() }
+            // Surface the run loop periodically so the UI isn't frozen through the
+            // whole multi-thousand-row import.
+            if i % 200 == 199 { await Task.yield() }
         }
         try? context.save()
     }

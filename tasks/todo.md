@@ -1,3 +1,87 @@
+# Task: Implement perf+bug review fixes (2026-06-16)
+
+Source: `tasks/perf-bug-review.md` (23 findings). Fixing ALL. Approach: 5 parallel
+subagents over disjoint file groups (A/B/C1/C2/D), then one integration build.
+Legend: 🔴 High · 🟠 Medium · 🟡 Low. Owner agent in parens.
+
+## Crash class — BUG-1 (raw `Int(Double)` traps) 🔴
+- [x] Food.swift:164 `restate` → `.rounded().safeInt` (C1)
+- [x] FoodDiaryView `save()` clamp grams ≤ 100_000 before restate (C1)
+- [x] FoodSearchView:578 "g total" → `.rounded().safeInt` (C2)
+- [x] EditFoodView clamp `servingGrams` ≤ 100_000 on save (C2)
+- [x] OnboardingView clamp Weight/Goal-weight fields (clamping Binding) + `.safeInt` labels (D)
+
+## High performance 🔴
+- [x] PERF-1 FoodSeedManager + ContentView: async seed, `Task.yield()` between batches (D)
+- [x] PERF-2 ProgressOverviewView: single series map, hoist trackedExercises/ordered (B)
+- [x] PERF-3 FoodDiaryView: group-once by meal; `==` start-of-day; kill empty-day rescan (C1)
+- [x] PERF-4 LogWorkoutView: compute previousEntry/best once; hoist sort (B)
+
+## Medium 🟠
+- [x] BUG-2 SpeechCapture: gate handler on `.listening`; stop() sets idle first (A)
+- [x] BUG-3 CaptureView: split text/photo task handles (A)
+- [x] BUG-4 FoodVisionProvider: Gemini `timeoutInterval = 30` (A)
+- [x] BUG-5 NutritionPlan/OnboardingView: ETA from realized (clamped) rate (D)
+- [x] BUG-6 OpenFoodFacts: `Task.isCancelled` check after await (A)
+- [x] PERF-5 FoodSearchView + RecipeEditorView: bound recentEntries (fetchLimit 200) (C2)
+- [x] PERF-6 MicronutrientPanelView: hoist `total` once (C1)
+- [x] PERF-7 NutrientTrendView: hoist `points` once (C1)
+- [x] PERF-8 TodayView: hoist eaten/weekSessions (latestWeight left as-is, see note) (C1)
+
+## Low 🟡
+- [x] BUG-7 HealthKitManager: gate "connected" on sharingAuthorized (D)
+- [x] BUG-8 Completeness: user-specific stay-under set (D)
+- [x] BUG-9 FoodProvider/FoodSearchView: RemoteFood Identifiable, drop id:\.offset (C2)
+- [x] BUG-10 BodyWeight: normalize date to startOfDay in init (D)
+- [x] BUG-11 FoodVisionProvider + OpenFoodFacts: one bounded retry on 429/5xx (A)
+- [x] PERF-9 ExerciseProgressView: hoist `points` once (B)
+- [x] PERF-10 CloudPrefs: debounce pushLocal (400ms), drop routine synchronize() (D)
+- [x] PERF-11 FoodSearch + CaptureMatcher: precompute query tokens once (D + C2)
+- [x] PERF-12 CaptureView: JPEG decode/encode off the main actor (nonisolated async) (A)
+- [x] PERF-13 usda-import: build tool only — NO ACTION needed
+- [x] Quick-win `.safeInt` sweep: TodayView, FoodDiaryView:188, CaptureMatcher:172,179 (C1/C2)
+
+## Verification
+- [x] Integration build green — **BUILD SUCCEEDED**, 0 errors / 0 warnings (iPhone 16 / iOS 18.0 sim; target is iOS 17.0)
+- [x] Hermetic logic tests (`trackliftsTests`) — **all passed, 0 failures** (exit 0). Notably the CaptureMatcher
+  confidence/density suite (PERF-11), CloudPrefs push/idempotency (PERF-10), and DRI/NutrientReference (BUG-5/8) all green.
+- [x] Review section (below)
+
+## Review (2026-06-16) — all 23 perf+bug findings fixed
+- **Approach:** 5 parallel subagents over disjoint file groups (no two agents touched the same file → zero
+  edit conflicts), one integration build + the hermetic logic suite to verify. Orchestrator re-verified the
+  crash-class sites and the perf hot paths against source first; that pre-check corrected a misattributed
+  finding (the "Age field" crash from the review was NOT real — Age/Height use a sliderbound `tickerStepper`
+  with no text field; the actual onboarding crash was the Weight/Goal-weight `tickerField`).
+- **Crash class (BUG-1) closed at all 3 reachable sites:** diary grams edit, custom-food serving, onboarding
+  weight — inputs clamped at the boundary (≤100_000 g / `weightBounds`) AND every raw `Int(Double)` display
+  routed through the existing saturating `Double.safeInt`. No more `Int.max` traps from a typed field.
+- **4 High perf fixes:** first-launch seed no longer freezes the UI (async + `Task.yield()`); ProgressOverview,
+  FoodDiary, and LogWorkout no longer re-scan/re-decode unbounded `@Query`s 3–6× per render (single-pass maps,
+  body-level `let` hoisting, `==` start-of-day instead of per-entry `Calendar.isDate`).
+- **Behavior preserved:** all perf fixes are pure memoization/hoisting; nutrition math, PR/series semantics,
+  and matcher behavior unchanged (logic suite confirms). BUG-8 is a latent-correctness fix (identical output
+  today). Two deliberate scope-limited deviations logged above (PERF-1 fallback, PERF-8 latestWeight).
+- **Not committed** (per the no-auto-commit rule) — working tree only.
+- **Residual (unchanged from the review):** perf gains are static/structural — magnitudes still want an
+  Instruments pass under a year of seeded data; device-only paths (HealthKit denial UX, live camera) need a
+  hardware eyeball. PERF-1 could later move to a true background `ModelContext` if the `@Model` inits are made
+  `nonisolated` (a deliberate, separable shared-API change).
+
+## Notes / deviations from spec
+- PERF-1: kept seeding on the main context but made `seedIfNeeded` `async` and added
+  `await Task.yield()` after decode + every 200 inserts (the finding's sanctioned fallback).
+  A true background `ModelContext` was avoided because the `@Model` inits are MainActor-isolated
+  (whole-target default), so a detached context would require marking those inits `nonisolated`
+  in Food.swift — a shared-API change out of scope. Still unfreezes the UI during the import.
+- PERF-8: `latestWeight` left unchanged — the `@Query` sorts by `date` only, but `latestWeight`
+  breaks ties on `(date, createdAt)`; swapping to `weights.last` could change the shown weight on
+  same-day entries. Hoisting done; the re-sort kept intentionally.
+- BUG-8: latent fix (current stay-under DRI limits are sex/age-independent, so output is identical
+  today) — removes the fixed-male/30 vs real-user membership mismatch.
+
+---
+
 # Task: Phase 4 — Capture magic (typed + voice + photo) (2026-06-11)
 
 Plan: `~/.claude/plans/idempotent-dazzling-lovelace.md` (approved). One pipeline, three front-ends → a

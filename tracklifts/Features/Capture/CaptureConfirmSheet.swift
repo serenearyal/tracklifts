@@ -76,7 +76,7 @@ struct CaptureConfirmList: View {
 
     private func row(_ m: Binding<CaptureMatch>) -> some View {
         let match = m.wrappedValue
-        let kcal = Int(((match.food?.kcalPer100g ?? 0) * match.grams / 100).rounded())
+        let kcal = ((match.food?.kcalPer100g ?? 0) * match.grams / 100).rounded().safeInt
         return HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {

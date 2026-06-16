@@ -24,22 +24,27 @@ struct CaptureView: View {
     @State private var noMatches = false
     @State private var speech = SpeechCapture()
 
-    // Photo (cloud Gemini, opt-in)
-    @AppStorage("photoAICloudEnabled") private var photoEnabled = false
+    // AI capture (cloud Gemini, opt-in — covers photo + typed/spoken descriptions)
+    @AppStorage("photoAICloudEnabled") private var aiEnabled = false
     @State private var showingCamera = false
     @State private var showingGallery = false
     @State private var photoItem: PhotosPickerItem?
-    @State private var showingPhotoOptIn = false
-    @State private var pendingPhoto: PhotoSource?
+    @State private var showingAIOptIn = false
+    @State private var pendingAction: CaptureAction?
     @State private var photoFlow: PhotoFlow = .idle
     @State private var workingImage: UIImage?
     @State private var photoNote = ""
     @State private var reviewAutofocus = false
-    @State private var analyzeTask: Task<Void, Never>?
+    @State private var textBusy = false
+    // Separate handles so starting the text-estimate flow doesn't cancel an in-flight
+    // photo analysis (and vice versa); both are cancelled on close/disappear.
+    @State private var textTask: Task<Void, Never>?
+    @State private var photoTask: Task<Void, Never>?
 
     @FocusState private var focused: Bool
 
-    enum PhotoSource { case camera, gallery }
+    /// A capture path gated behind the AI opt-in, so granting it can resume the action.
+    enum CaptureAction { case camera, gallery, describe }
 
     /// A parsed+matched set, wrapped so it can drive `navigationDestination(item:)`.
     /// Identity is the only thing navigation needs, hence by-id `Hashable` (its
@@ -70,7 +75,7 @@ struct CaptureView: View {
                     onRetake: { photoFlow = .idle; deferred { start(.camera) } },
                     onGallery: { photoFlow = .idle; deferred { start(.gallery) } },
                     onType:   { photoFlow = .idle; focused = true },
-                    onClose:  { analyzeTask?.cancel(); photoFlow = .idle }
+                    onClose:  { textTask?.cancel(); photoTask?.cancel(); photoFlow = .idle }
                 )
                 .transition(.opacity)
                 .zIndex(2)
@@ -105,21 +110,21 @@ struct CaptureView: View {
                 }
             }
             .keyboardDoneBar()
-            .onDisappear { speech.stop() }
+            .onDisappear { speech.stop(); textTask?.cancel(); photoTask?.cancel() }
             .onChange(of: speech.transcript) { _, t in if !t.isEmpty { text = t } }
             .onChange(of: photoItem) { _, item in if let item { analyzeGallery(item) } }
             .fullScreenCover(isPresented: $showingCamera) {
                 MealCameraPicker { image in presentReview(image) }.ignoresSafeArea()
             }
             .photosPicker(isPresented: $showingGallery, selection: $photoItem, matching: .images)
-            .confirmationDialog("Use photo recognition?", isPresented: $showingPhotoOptIn, titleVisibility: .visible) {
+            .confirmationDialog("Use AI estimation?", isPresented: $showingAIOptIn, titleVisibility: .visible) {
                 Button("Enable") {
-                    photoEnabled = true
-                    if let p = pendingPhoto { pendingPhoto = nil; deferred { start(p) } }
+                    aiEnabled = true
+                    if let action = pendingAction { pendingAction = nil; deferred { resume(action) } }
                 }
-                Button("Cancel", role: .cancel) { pendingPhoto = nil }
+                Button("Cancel", role: .cancel) { pendingAction = nil }
             } message: {
-                Text("Your photo is sent to Google Gemini to identify foods. Typed and voice capture stay on your device.")
+                Text("Your meal photo or description is sent to Google Gemini to estimate foods and calories. Spoken meals are transcribed on your device first.")
             }
             .navigationDestination(item: $batch) { b in
                 CaptureConfirmList(matches: b.matches, day: day,
@@ -144,8 +149,8 @@ struct CaptureView: View {
                 Text("Camera capture needs a real device — pick a meal photo from your library instead.")
                     .font(.sans(12)).foregroundStyle(Palette.inkTertiary)
             }
-            if photoEnabled, !GeminiConfig.isConfigured {
-                Text("Add your Gemini API key (Secrets.plist) to enable photo recognition.")
+            if aiEnabled, !GeminiConfig.isConfigured {
+                Text("Add your Gemini API key (Secrets.plist) to enable AI estimation.")
                     .font(.sans(12)).foregroundStyle(Palette.inkTertiary)
             }
         }
@@ -169,7 +174,7 @@ struct CaptureView: View {
         VStack(alignment: .leading, spacing: 10) {
             ZStack(alignment: .topLeading) {
                 if text.isEmpty {
-                    Text("e.g. 2 eggs, a cup of oatmeal with blueberries, and 200g chicken breast")
+                    Text("e.g. a large latte with oat milk and 2 sugars, and a blueberry muffin")
                         .font(.sans(15)).foregroundStyle(Palette.inkTertiary)
                         .padding(.vertical, 16).padding(.horizontal, 14)
                         .allowsHitTesting(false)
@@ -185,9 +190,10 @@ struct CaptureView: View {
             .background(Palette.surface, in: .rect(cornerRadius: 14))
             .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Palette.hairline, lineWidth: 1))
 
-            EmberButton(title: "Find Foods", systemImage: "arrow.right") { parse() }
-                .disabled(trimmed.isEmpty)
-                .opacity(trimmed.isEmpty ? 0.5 : 1)
+            EmberButton(title: textBusy ? "Estimating…" : "Estimate",
+                        systemImage: textBusy ? "hourglass" : "sparkles") { submitText() }
+                .disabled(trimmed.isEmpty || textBusy)
+                .opacity(trimmed.isEmpty || textBusy ? 0.5 : 1)
         }
     }
 
@@ -235,17 +241,59 @@ struct CaptureView: View {
 
     // MARK: - Actions
 
-    /// Gate photo behind the opt-in, then present the chosen source.
-    private func start(_ source: PhotoSource) {
-        guard photoEnabled else { pendingPhoto = source; showingPhotoOptIn = true; return }
+    /// Gate a cloud capture behind the AI opt-in, then present the chosen source.
+    private func start(_ source: CaptureAction) {
+        guard aiEnabled else { pendingAction = source; showingAIOptIn = true; return }
         switch source {
         case .camera: showingCamera = true
         case .gallery: showingGallery = true
+        case .describe: submitText()
         }
     }
 
-    private func parse() {
-        let items = MealTextParser.parse(text)
+    /// Resume a gated action once the AI opt-in is granted.
+    private func resume(_ action: CaptureAction) {
+        switch action {
+        case .camera: start(.camera)
+        case .gallery: start(.gallery)
+        case .describe: submitText()
+        }
+    }
+
+    /// Typed/spoken meal: estimate with AI when available, else fall back to the
+    /// on-device catalog match so logging still works offline / without a key.
+    private func submitText() {
+        let desc = trimmed
+        guard !desc.isEmpty else { return }
+        noMatches = false
+        guard aiEnabled else { pendingAction = .describe; showingAIOptIn = true; return }
+        guard GeminiConfig.isConfigured else { matchOnDevice(desc); return }
+        estimateWithAI(desc)
+    }
+
+    private func estimateWithAI(_ desc: String) {
+        textBusy = true
+        focused = false
+        textTask?.cancel()
+        textTask = Task {
+            defer { textBusy = false }
+            do {
+                let items = try await FoodText.shared.estimate(description: desc)
+                guard !Task.isCancelled else { return }
+                batch = CaptureBatch(matches: CaptureMatcher.match(items, in: context))
+            } catch is CancellationError {
+                // dismissed mid-flight — leave the sheet as-is
+            } catch {
+                // offline / no foods / bad response → fall back to on-device matching
+                guard !Task.isCancelled else { return }
+                matchOnDevice(desc)
+            }
+        }
+    }
+
+    /// On-device fallback: heuristic parse + catalog match (the pre-AI behavior).
+    private func matchOnDevice(_ desc: String) {
+        let items = MealTextParser.parse(desc)
         guard !items.isEmpty else { noMatches = true; return }
         noMatches = false
         batch = CaptureBatch(matches: CaptureMatcher.match(items, in: context))
@@ -255,7 +303,8 @@ struct CaptureView: View {
         Task {
             let data = try? await item.loadTransferable(type: Data.self)
             photoItem = nil
-            guard let data, let image = UIImage(data: data) else {
+            // Decode off the main actor (large library images are slow to decode).
+            guard let data, let image = await Self.decodeImage(from: data) else {
                 workingImage = nil
                 photoFlow = .failed(.unreadable)
                 return
@@ -280,10 +329,16 @@ struct CaptureView: View {
         workingImage = image
         noMatches = false
         guard GeminiConfig.isConfigured else { photoFlow = .failed(.notConfigured); return }
-        guard let jpeg = prepareJPEG(image) else { photoFlow = .failed(.unreadable); return }
         photoFlow = .analyzing
-        analyzeTask?.cancel()
-        analyzeTask = Task {
+        photoTask?.cancel()
+        photoTask = Task {
+            // Resize + EXIF-strip + encode off the main actor (nonisolated static),
+            // so a large photo doesn't hitch the UI while the loader is up.
+            guard let jpeg = await Self.makeJPEG(from: image) else {
+                guard !Task.isCancelled else { return }
+                photoFlow = .failed(.unreadable); return
+            }
+            guard !Task.isCancelled else { return }
             do {
                 let items = try await FoodVision.shared.recognize(jpeg, note: note)
                 guard !Task.isCancelled else { return }
@@ -315,7 +370,16 @@ struct CaptureView: View {
     }
 
     /// Normalize to a reasonably-sized JPEG to control upload size + cost.
-    private func prepareJPEG(_ image: UIImage, maxDimension: CGFloat = 1024) -> Data? {
+    /// SECURITY: the unconditional re-render through `UIGraphicsImageRenderer` also
+    /// strips EXIF/GPS metadata (it lives on the original asset, not the redrawn
+    /// pixel buffer) before the photo leaves the device. Keep this redraw
+    /// unconditional — do NOT add a "forward the original `Data` when it's already
+    /// small" shortcut, or location metadata would leak to the cloud vision provider.
+    ///
+    /// `nonisolated async` so the awaited resize/encode runs off the main actor (on
+    /// the cooperative pool — the `UIImage`/`Data` cross the boundary fine), keeping
+    /// the UI smooth for large photos; only the resulting `Data` is handed back.
+    nonisolated private static func makeJPEG(from image: UIImage, maxDimension: CGFloat = 1024) async -> Data? {
         let longest = max(image.size.width, image.size.height)
         let scale = longest > maxDimension ? maxDimension / longest : 1
         let target = CGSize(width: image.size.width * scale, height: image.size.height * scale)
@@ -323,6 +387,12 @@ struct CaptureView: View {
             image.draw(in: CGRect(origin: .zero, size: target))
         }
         return resized.jpegData(compressionQuality: 0.8)
+    }
+
+    /// Decode raw photo `Data` into a `UIImage` off the main actor (large gallery
+    /// images are expensive to decode); returns nil for unreadable data.
+    nonisolated private static func decodeImage(from data: Data) async -> UIImage? {
+        UIImage(data: data)
     }
 
     /// Run after the current UI update settles — avoids presenting a cover while

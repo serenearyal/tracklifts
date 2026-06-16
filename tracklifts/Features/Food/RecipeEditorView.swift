@@ -138,7 +138,7 @@ struct RecipeEditorView: View {
 
     private func ingredientRow(_ item: Binding<Draft>) -> some View {
         let food = item.wrappedValue.food
-        let kcal = Int((food.kcalPer100g * item.wrappedValue.grams / 100).rounded())
+        let kcal = (food.kcalPer100g * item.wrappedValue.grams / 100).rounded().safeInt
         return HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(food.name).font(.sans(14, .semibold)).foregroundStyle(Palette.ink).lineLimit(1)
@@ -262,11 +262,18 @@ private struct RecipeFoodPicker: View {
     @Environment(\.modelContext) private var context
     let onPick: (FoodItem) -> Void
 
-    @Query(sort: \DiaryEntry.createdAt, order: .reverse) private var recentEntries: [DiaryEntry]
+    // Bounded so `recentFoods` (deduped to 8) never walks the entire diary history.
+    @Query(Self.recentEntriesDescriptor) private var recentEntries: [DiaryEntry]
     @State private var searchText = ""
     @State private var results: [FoodItem] = []
     @State private var searchTask: Task<Void, Never>?
     @FocusState private var focused: Bool
+
+    private static var recentEntriesDescriptor: FetchDescriptor<DiaryEntry> {
+        var d = FetchDescriptor<DiaryEntry>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
+        d.fetchLimit = 200
+        return d
+    }
 
     private var recentFoods: [FoodItem] {
         var seen = Set<PersistentIdentifier>()

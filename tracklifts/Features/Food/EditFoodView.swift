@@ -216,6 +216,9 @@ struct EditFoodView: View {
     }
 
     private func save() {
+        // Clamp the unclamped serving-size field: an absurd value persists into a
+        // FoodPortion and later traps the log display. 100 kg is a generous ceiling.
+        let servingGrams = min(self.servingGrams, 100_000)
         let per100g = NutrientVector.fromPerServing(amounts, servingGrams: servingGrams)
         let trimmedName = name.trimmingCharacters(in: .whitespaces)
         let trimmedBrand = brand.trimmingCharacters(in: .whitespaces)

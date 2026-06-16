@@ -22,16 +22,16 @@ struct OpenFoodFactsProvider: FoodProvider {
     func lookup(barcode: String) async -> RemoteFood? {
         let gtin = barcode.filter(\.isNumber)
         guard gtin.count >= 8 else { return nil }
-        var c = URLComponents(string: "\(Self.host)/api/v2/product/\(gtin).json")!
+        guard var c = URLComponents(string: "\(Self.host)/api/v2/product/\(gtin).json") else { return nil }
         c.queryItems = [URLQueryItem(name: "fields", value: Self.fields)]
         guard let data = await Self.get(c.url) else { return nil }
         return Self.decodeProduct(data, fallbackBarcode: gtin)
     }
 
     func search(_ query: String) async -> [RemoteFood] {
-        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let q = String(query.trimmingCharacters(in: .whitespacesAndNewlines).prefix(100))
         guard q.count >= 2 else { return [] }
-        var c = URLComponents(string: "\(Self.host)/cgi/search.pl")!
+        guard var c = URLComponents(string: "\(Self.host)/cgi/search.pl") else { return [] }
         c.queryItems = [
             URLQueryItem(name: "search_terms", value: q),
             URLQueryItem(name: "search_simple", value: "1"),
@@ -41,6 +41,9 @@ struct OpenFoodFactsProvider: FoodProvider {
             URLQueryItem(name: "fields", value: Self.fields),
         ]
         guard let data = await Self.get(c.url) else { return [] }
+        // The cgi/search.pl await is slow; if a newer query superseded this one,
+        // drop the stale result rather than decode + return it.
+        if Task.isCancelled { return [] }
         return Self.decodeSearch(data)
     }
 
@@ -52,7 +55,13 @@ struct OpenFoodFactsProvider: FoodProvider {
         req.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         req.timeoutInterval = 12
         do {
-            let (data, response) = try await URLSession.shared.data(for: req)
+            var (data, response) = try await URLSession.shared.data(for: req)
+            // One bounded retry with a short backoff on transient server errors
+            // (overload / 5xx); any other non-2xx returns nil as before.
+            if let http = response as? HTTPURLResponse, [429, 500, 502, 503].contains(http.statusCode) {
+                try await Task.sleep(for: .milliseconds(600))
+                (data, response) = try await URLSession.shared.data(for: req)
+            }
             if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
                 return nil
             }
@@ -87,10 +96,14 @@ struct OpenFoodFactsProvider: FoodProvider {
         // OFF lists multiple brands comma-separated; take the first.
         let brand = (p.brands ?? "").split(separator: ",").first
             .map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
+        // Clamp serving weight: OFF is community-editable, so a non-finite/huge
+        // serving would overflow the kcal-per-portion math at display time.
+        let serving = p.servingQuantity?.value ?? 0
+        let servingGrams = serving.isFinite ? min(max(0, serving), 10_000) : 0
         return RemoteFood(name: name, brand: brand,
                           barcode: p.code ?? fallbackBarcode,
                           per100g: mapNutriments(numeric),
-                          servingGrams: max(0, p.servingQuantity?.value ?? 0))
+                          servingGrams: servingGrams)
     }
 
     /// Pure: OFF per-100 g nutriments → our `NutrientVector`. Unit-tested.
@@ -125,7 +138,14 @@ struct OpenFoodFactsProvider: FoodProvider {
         set(.potassium, "potassium_100g", scale: 1000)
         set(.zinc, "zinc_100g", scale: 1000)
         set(.vitaminC, "vitamin-c_100g", scale: 1000)
-        return NutrientVector(v)
+        // SECURITY: OFF values are untrusted (anyone can edit a product). Reject
+        // non-finite / negative amounts and cap absurd magnitudes so a poisoned or
+        // mis-entered record can't trap a later `Int(...)` display conversion or
+        // corrupt diary totals.
+        let safe = v.compactMapValues { x in
+            x.isFinite && x >= 0 ? min(x, NutrientVector.maxPer100g) : nil
+        }
+        return NutrientVector(safe)
     }
 }
 

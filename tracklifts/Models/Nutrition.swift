@@ -128,6 +128,11 @@ struct NutrientVector: Codable, Equatable {
         (try? decoder.decode(NutrientVector.self, from: data)) ?? NutrientVector()
     }
 
+    /// Upper bound for any stored per-100 g amount. Values from third-party / AI
+    /// sources are untrusted; capping here keeps a bad number from overflowing the
+    /// portion math and trapping a later `Int(...)` display conversion.
+    static let maxPer100g: Double = 1_000_000
+
     // MARK: Custom foods — per-serving entry ↔ per-100 g storage
 
     /// Build a per-100 g vector from amounts entered **per serving** (the way a
@@ -136,7 +141,14 @@ struct NutrientVector: Codable, Equatable {
     static func fromPerServing(_ amounts: [String: Double], servingGrams: Double) -> NutrientVector {
         guard servingGrams > 0 else { return NutrientVector([:]) } // truly empty, not zero-filled macros
         let factor = 100 / servingGrams
-        return NutrientVector(amounts.compactMapValues { $0 == 0 ? nil : $0 * factor })
+        // Drop non-positive/non-finite results and cap absurd densities so a bad
+        // per-serving input (huge value, tiny serving, NaN/Inf) can't poison the
+        // stored vector and later trap an `Int(...)` display conversion.
+        return NutrientVector(amounts.compactMapValues { raw in
+            let scaled = raw * factor
+            guard scaled.isFinite, scaled > 0 else { return nil }
+            return min(scaled, Self.maxPer100g)
+        })
     }
 
     /// The amounts **per serving** of `servingGrams`, keyed by `Nutrient.rawValue`
@@ -208,10 +220,23 @@ enum Meal: String, CaseIterable, Identifiable, Codable {
 // MARK: - Formatting helpers
 
 extension Double {
+    /// Saturating, NaN/Inf-safe conversion to `Int`. Plain `Int(self)` **traps**
+    /// (crashes) in Swift when the value is non-finite or outside `Int`'s range;
+    /// nutrient magnitudes that originate from third-party / AI sources can be
+    /// either, so display code rounds then funnels through this to degrade to a
+    /// safe number instead of crashing. See the SECURITY notes in
+    /// `NutrientVector.fromPerServing` and `OpenFoodFactsProvider.mapNutriments`.
+    var safeInt: Int {
+        guard isFinite else { return 0 }
+        if self >= Double(Int.max) { return Int.max }
+        if self <= Double(Int.min) { return Int.min }
+        return Int(self)
+    }
+
     /// Whole-number kcal/gram string, e.g. "165".
-    var asCalories: String { String(Int(rounded())) }
+    var asCalories: String { String(rounded().safeInt) }
     /// Grams with at most one decimal, no trailing ".0".
     var asGrams: String {
-        self == rounded() ? String(Int(rounded())) : String(format: "%.1f", self)
+        self == rounded() ? String(rounded().safeInt) : String(format: "%.1f", self)
     }
 }

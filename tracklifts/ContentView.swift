@@ -44,7 +44,7 @@ struct RootView: View {
             }
             SeedManager.seedIfNeeded(context)
             SeedManager.seedBodyWeightIfNeeded(context)
-            FoodSeedManager.seedIfNeeded(context)
+            await FoodSeedManager.seedIfNeeded(context)
             if ProcessInfo.processInfo.arguments.contains("--seed-sample") {
                 SampleData.seedIfNeeded(context)
             }

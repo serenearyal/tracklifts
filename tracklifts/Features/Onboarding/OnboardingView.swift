@@ -436,11 +436,18 @@ struct OnboardingView: View {
     private func tickerField(label: String, value: Binding<Double>, range: ClosedRange<Double>,
                              focus: FocusField, dec: @escaping () -> Void,
                              inc: @escaping () -> Void) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        // The text field commits within `range` so a wild typed value (e.g. a
+        // 19-digit decimalPad entry) can't poison the stored weight/target or the
+        // Int-derived labels downstream. Slider/steppers already clamp themselves,
+        // so only the typed path is wrapped here.
+        let clamped = Binding<Double>(
+            get: { value.wrappedValue },
+            set: { value.wrappedValue = min(max($0, range.lowerBound), range.upperBound) })
+        return VStack(alignment: .leading, spacing: 12) {
             fieldLabel(label)
             HStack(spacing: 10) {
                 stepButton("minus", dec)
-                TextField("0", value: value, format: .number)
+                TextField("0", value: clamped, format: .number)
                     .keyboardType(.decimalPad)
                     .focused($focusedField, equals: focus)
                     .multilineTextAlignment(.center)
@@ -486,8 +493,8 @@ struct OnboardingView: View {
     // MARK: - Target & pace helpers
 
     private var targetKg: Double { unit == .lb ? targetWeight * 0.453592 : targetWeight }
-    private var weightLabel: String { "\(Int(weight.rounded())) \(unit.label)" }
-    private var targetWeightLabel: String { "\(Int(targetWeight.rounded())) \(unit.label)" }
+    private var weightLabel: String { "\(weight.rounded().safeInt) \(unit.label)" }
+    private var targetWeightLabel: String { "\(targetWeight.rounded().safeInt) \(unit.label)" }
 
     /// Allowed goal-weight range in the active unit, kept on the correct side of
     /// the current weight for the chosen goal.
@@ -566,29 +573,34 @@ struct OnboardingView: View {
         let raw = unit == .lb ? weeklyKg / 0.453592 : weeklyKg
         // Two decimals below 1 unit/wk so slow paces (lean bulk) stay distinct.
         let weekly = String(format: raw < 1 ? "%.2f" : "%.1f", raw)
-        let wks = Int(NutritionPlan.weeksToTarget(currentKg: weightKg, targetKg: targetKg,
-                                                  weeklyRateKg: weeklyKg).rounded())
+        // ETA from the REALIZED (clamped) rate so it matches what the calorie
+        // target actually delivers, not the raw pace rate (BUG-5).
+        let realizedKg = NutritionPlan.realizedWeeklyKg(goal: goal ?? .maintain, weeklyRateKg: weeklyKg)
+        let wks = NutritionPlan.weeksToTarget(currentKg: weightKg, targetKg: targetKg,
+                                              weeklyRateKg: realizedKg).rounded().safeInt
         let time = wks > 0 ? " · ~\(wks) wk\(wks == 1 ? "" : "s")" : ""
         return "\(weekly) \(unit.label)/wk\(time)"
     }
 
     /// Daily calorie delta for the selected pace, e.g. "−515 kcal / day deficit".
     private var deltaSummary: String {
-        let d = Int(energyDelta.rounded())
+        let d = energyDelta.rounded().safeInt
         guard d != 0 else { return "" }
         return "\(d > 0 ? "+" : "−")\(abs(d)) kcal / day \(d > 0 ? "surplus" : "deficit")"
     }
 
     private var weeks: Double {
-        NutritionPlan.weeksToTarget(currentKg: weightKg, targetKg: targetKg, weeklyRateKg: effectiveWeeklyKg)
+        // Realized (clamped) rate so the ETA agrees with the calorie target (BUG-5).
+        let realizedKg = NutritionPlan.realizedWeeklyKg(goal: goal ?? .maintain, weeklyRateKg: effectiveWeeklyKg)
+        return NutritionPlan.weeksToTarget(currentKg: weightKg, targetKg: targetKg, weeklyRateKg: realizedKg)
     }
 
     /// "Reach 75 kg in ~12 weeks at a recommended pace." — only for lose/gain.
     private var planTimeframeLine: String? {
         guard let goal, goal.changesWeight else { return nil }
-        let wks = Int(weeks.rounded())
+        let wks = weeks.rounded().safeInt
         guard wks > 0 else { return nil }
-        let time = wks < 12 ? "~\(wks) weeks" : "~\(Int((weeks / 4.345).rounded())) months"
+        let time = wks < 12 ? "~\(wks) weeks" : "~\((weeks / 4.345).rounded().safeInt) months"
         return "Reach \(targetWeightLabel) in \(time) at a \(pace.label.lowercased()) pace."
     }
 

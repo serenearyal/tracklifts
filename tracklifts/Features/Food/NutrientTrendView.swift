@@ -50,12 +50,13 @@ struct NutrientTrendView: View {
     }
 
     var body: some View {
-        ScrollView {
+        let pts = points // bucket/sort the diary once; shared by summary + chart
+        return ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 nutrientPicker
                 rangePicker
-                if points.count >= 2 {
-                    VStack(spacing: 14) { summaryRow; chart }.cardStyle(padding: 16)
+                if pts.count >= 2 {
+                    VStack(spacing: 14) { summaryRow(points: pts); chart(points: pts) }.cardStyle(padding: 16)
                 } else {
                     notEnoughData
                 }
@@ -106,7 +107,7 @@ struct NutrientTrendView: View {
 
     // MARK: - Chart
 
-    private var summaryRow: some View {
+    private func summaryRow(points: [DayPoint]) -> some View {
         let vals = points.map(\.value)
         let avg = vals.isEmpty ? 0 : vals.reduce(0, +) / Double(vals.count)
         return HStack(spacing: 0) {
@@ -123,7 +124,7 @@ struct NutrientTrendView: View {
         Rectangle().fill(Palette.hairline).frame(width: 1, height: 34)
     }
 
-    private var chart: some View {
+    private func chart(points: [DayPoint]) -> some View {
         Chart {
             ForEach(points) { point in
                 AreaMark(x: .value("Date", point.date), y: .value(selected.label, point.value))

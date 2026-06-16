@@ -13,13 +13,17 @@ import Foundation
 
 /// A branded/packaged food resolved from a remote source, normalized to the same
 /// per-100 g shape the catalog stores. No SwiftData here — this is the boundary.
-struct RemoteFood: Equatable {
+struct RemoteFood: Equatable, Identifiable {
     var name: String
     var brand: String
     var barcode: String
     var per100g: NutrientVector
     /// Grams in one labelled serving (0 = unknown).
     var servingGrams: Double
+
+    /// Stable identity for `ForEach` — the GTIN when present, else a name+brand
+    /// composite (results without a barcode still get a deterministic key).
+    var id: String { barcode.isEmpty ? "\(name)|\(brand)" : barcode }
 }
 
 protocol FoodProvider {

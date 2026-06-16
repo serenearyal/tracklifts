@@ -42,20 +42,26 @@ struct FoodDiaryView: View {
     @State private var showingCapture = false
 
     private var dayEntries: [DiaryEntry] {
-        allEntries.filter { Calendar.current.isDate($0.date, inSameDayAs: day) }
+        // DiaryEntry.date is already start-of-day, so an equality compare matches
+        // the prior `isDate(_:inSameDayAs:)` while filtering the table just once.
+        let start = Calendar.current.startOfDay(for: day)
+        return allEntries.filter { $0.date == start }
     }
     private func entries(for meal: Meal) -> [DiaryEntry] {
         dayEntries.filter { $0.meal == meal }.sorted { $0.createdAt < $1.createdAt }
     }
 
     private var previousDayEntries: [DiaryEntry] {
-        let prev = Calendar.current.date(byAdding: .day, value: -1, to: day) ?? day
-        return allEntries.filter { Calendar.current.isDate($0.date, inSameDayAs: prev) }
+        let cal = Calendar.current
+        let prev = cal.date(byAdding: .day, value: -1, to: day) ?? day
+        let start = cal.startOfDay(for: prev)
+        return allEntries.filter { $0.date == start }
     }
 
     var body: some View {
         let dayEntries = self.dayEntries
         let total = DiaryMath.total(dayEntries) // one decode pass per render, shared below
+        let byMeal = Dictionary(grouping: dayEntries, by: { $0.meal }) // group once; sections read from this
         return NavigationStack {
             List {
                 Section {
@@ -69,7 +75,7 @@ struct FoodDiaryView: View {
                     }
                 }
                 ForEach(Meal.allCases) { meal in
-                    mealSection(meal)
+                    mealSection(meal, items: (byMeal[meal] ?? []).sorted { $0.createdAt < $1.createdAt })
                 }
             }
             .listStyle(.plain)
@@ -176,7 +182,7 @@ struct FoodDiaryView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Eyebrow(text: "Energy")
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(Int(total.energy.rounded()).formatted())
+                        Text(total.energy.rounded().safeInt.formatted())
                             .font(.display(44)).foregroundStyle(Palette.ink)
                             .contentTransition(.numericText())
                         Text("/ \(Int(goalEnergy)) kcal")
@@ -185,7 +191,7 @@ struct FoodDiaryView: View {
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text(Int(abs(remaining).rounded()).formatted())
+                    Text(abs(remaining).rounded().safeInt.formatted())
                         .font(.display(26))
                         .foregroundStyle(remaining >= 0 ? Palette.up : Palette.down)
                     Text(remaining >= 0 ? "LEFT" : "OVER")
@@ -337,8 +343,7 @@ struct FoodDiaryView: View {
 
     // MARK: - Meal section
 
-    private func mealSection(_ meal: Meal) -> some View {
-        let items = entries(for: meal)
+    private func mealSection(_ meal: Meal, items: [DiaryEntry]) -> some View {
         let kcal = items.reduce(0.0) { $0 + $1.kcal }
         return Section {
             if items.isEmpty {
@@ -367,7 +372,7 @@ struct FoodDiaryView: View {
             Text(meal.label).font(.sans(13, .bold)).tracking(1).foregroundStyle(Palette.ink).textCase(nil)
             Spacer()
             if kcal > 0 {
-                Text("\(Int(kcal.rounded())) kcal").font(.sans(12, .semibold)).foregroundStyle(Palette.inkSecondary)
+                Text("\(kcal.rounded().safeInt) kcal").font(.sans(12, .semibold)).foregroundStyle(Palette.inkSecondary)
             }
             if hasItems {
                 Button { sheet = .saveMeal(meal) } label: {
@@ -413,7 +418,7 @@ struct FoodDiaryView: View {
                 }
                 Spacer()
                 HStack(alignment: .firstTextBaseline, spacing: 3) {
-                    Text("\(Int(entry.kcal.rounded()))").font(.display(22)).foregroundStyle(Palette.ink)
+                    Text("\(entry.kcal.rounded().safeInt)").font(.display(22)).foregroundStyle(Palette.ink)
                     Text("kcal").font(.sans(10, .semibold)).foregroundStyle(Palette.inkSecondary)
                 }
             }
@@ -540,6 +545,7 @@ struct EditDiaryEntrySheet: View {
 
     private func save() {
         guard grams > 0 else { return }
+        let grams = min(self.grams, 100_000) // 100 kg single-portion cap (consistent with app-wide caps)
         entry.restate(grams: grams, meal: meal)
         try? context.save()
         HealthKitManager.shared.syncDay(entry.date, context: context)

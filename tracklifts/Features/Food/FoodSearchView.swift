@@ -28,7 +28,9 @@ struct FoodSearchView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
-    @Query(sort: \DiaryEntry.createdAt, order: .reverse) private var recentEntries: [DiaryEntry]
+    // Bounded so `recentFoods` (which dedupes to 8) never materializes the whole
+    // all-time diary on every render — only the most-recent slice can matter.
+    @Query(Self.recentEntriesDescriptor) private var recentEntries: [DiaryEntry]
     @Query(sort: \SavedMeal.createdAt, order: .reverse) private var savedMeals: [SavedMeal]
     @Query(sort: \Recipe.createdAt, order: .reverse) private var recipes: [Recipe]
     @State private var searchText = ""
@@ -92,6 +94,14 @@ struct FoodSearchView: View {
         results = FoodSearch.run(term, in: context) // shared ranking (see Data/FoodSearch.swift)
     }
 
+    /// Newest diary entries, capped — enough to dedupe down to 8 distinct foods
+    /// without walking the entire history.
+    private static var recentEntriesDescriptor: FetchDescriptor<DiaryEntry> {
+        var d = FetchDescriptor<DiaryEntry>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
+        d.fetchLimit = 200
+        return d
+    }
+
     /// Most-recently-logged distinct foods — a quick re-log shortcut.
     private var recentFoods: [FoodItem] {
         var seen = Set<PersistentIdentifier>()
@@ -139,7 +149,7 @@ struct FoodSearchView: View {
                             ForEach(results) { food in foodLink(food) }
                             if !onlineResults.isEmpty {
                                 onlineHeader
-                                ForEach(Array(onlineResults.enumerated()), id: \.offset) { _, r in
+                                ForEach(onlineResults) { r in
                                     remoteRow(r)
                                 }
                             }
@@ -276,7 +286,7 @@ struct FoodSearchView: View {
                     .frame(width: 26)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(saved.name).font(.sans(15, .semibold)).foregroundStyle(Palette.ink).lineLimit(1)
-                    Text("\(saved.orderedItems.count) items · \(Int(saved.totalKcal.rounded())) kcal")
+                    Text("\(saved.orderedItems.count) items · \(saved.totalKcal.rounded().safeInt) kcal")
                         .font(.sans(11)).foregroundStyle(Palette.inkSecondary).lineLimit(1)
                 }
                 Spacer(minLength: 12)
@@ -336,7 +346,7 @@ struct FoodSearchView: View {
 
     private func recipeSubtitle(_ recipe: Recipe) -> String {
         let food = recipe.food
-        let kcal = Int(((food?.kcalPer100g ?? 0) * (food?.defaultPortion.grams ?? 0) / 100).rounded())
+        let kcal = ((food?.kcalPer100g ?? 0) * (food?.defaultPortion.grams ?? 0) / 100).rounded().safeInt
         let n = recipe.orderedIngredients.count
         return "\(n) ingredient\(n == 1 ? "" : "s") · \(kcal) kcal/serving"
     }
@@ -371,7 +381,7 @@ struct FoodSearchView: View {
                             Text(r.brand).font(.sans(11, .semibold)).foregroundStyle(Palette.inkSecondary)
                             Text("·").foregroundStyle(Palette.inkTertiary)
                         }
-                        Text("\(Int(r.per100g.energy.rounded())) kcal / 100 g")
+                        Text("\(r.per100g.energy.rounded().safeInt) kcal / 100 g")
                             .font(.sans(11)).foregroundStyle(Palette.inkSecondary).lineLimit(1)
                     }
                 }
@@ -448,7 +458,7 @@ struct FoodRow: View {
     /// Energy from the promoted `kcalPer100g` column — avoids JSON-decoding the
     /// full nutrient blob just to show one number per row.
     private var servingKcal: Int {
-        Int((food.kcalPer100g * food.defaultPortion.grams / 100).rounded())
+        (food.kcalPer100g * food.defaultPortion.grams / 100).rounded().safeInt
     }
 
     var body: some View {
@@ -476,13 +486,13 @@ struct MacroPreview: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            cell(Int(nutrients.energy.rounded()).formatted(), "kcal", Palette.ember)
+            cell(nutrients.energy.rounded().safeInt.formatted(), "kcal", Palette.ember)
             divider
-            cell("\(Int(nutrients.protein.rounded()))g", "Protein", Palette.up)
+            cell("\(nutrients.protein.rounded().safeInt)g", "Protein", Palette.up)
             divider
-            cell("\(Int(nutrients.carbs.rounded()))g", "Carbs", Palette.gold)
+            cell("\(nutrients.carbs.rounded().safeInt)g", "Carbs", Palette.gold)
             divider
-            cell("\(Int(nutrients.fat.rounded()))g", "Fat", Color(hex: 0x4DABF7))
+            cell("\(nutrients.fat.rounded().safeInt)g", "Fat", Color(hex: 0x4DABF7))
         }
         .padding(.vertical, 16)
         .cardStyle(padding: 8)
@@ -566,7 +576,7 @@ struct LogFoodView: View {
                             .contentTransition(.numericText())
                         stepperButton("plus") { quantity += 0.25 }
                     }
-                    Text("\(Int(grams.rounded())) g total")
+                    Text("\(grams.rounded().safeInt) g total")
                         .font(.sans(12)).foregroundStyle(Palette.inkTertiary)
                 }
                 .cardStyle(padding: 16)
